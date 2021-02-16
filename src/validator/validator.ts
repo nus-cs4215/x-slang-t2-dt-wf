@@ -1,4 +1,4 @@
-import { ancestor, base, FullWalkerCallback } from '../utils/walkers'
+import { babelAncestor, base, FullWalkerCallback } from '../utils/walkers'
 import * as es from 'estree'
 import { Context, TypeAnnotatedNode } from '../types'
 import { getVariableDecarationName } from '../utils/astCreator'
@@ -28,7 +28,7 @@ export function validateAndAnnotate(
   }
 
   // initialise scope of variables
-  ancestor(program as es.Node, {
+  babelAncestor(program as es.Node, {
     Program: processBlock,
     BlockStatement: processBlock,
     FunctionDeclaration: processFunction,
@@ -56,7 +56,7 @@ export function validateAndAnnotate(
       }
     }
   }
-  ancestor(
+  babelAncestor(
     program,
     {
       VariableDeclaration(node: TypeAnnotatedNode<es.VariableDeclaration>, ancestors: es.Node[]) {

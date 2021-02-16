@@ -23,6 +23,6 @@ export const JSSLANG_PROPERTIES = {
   factorToIncreaseBy: 10
 }
 
-export const sourceLanguages: SourceLanguage[] = [{ variant: 'calc' }]
+export const sourceLanguages: SourceLanguage[] = [{ variant: 'calc' },{ variant: 'typescript' }]
 
 export const ACORN_PARSE_OPTIONS: Options = { ecmaVersion: 2015 }

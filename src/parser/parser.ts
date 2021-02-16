@@ -21,6 +21,9 @@ import { ErrorNode } from 'antlr4ts/tree/ErrorNode'
 import { ParseTree } from 'antlr4ts/tree/ParseTree'
 import { RuleNode } from 'antlr4ts/tree/RuleNode'
 import { TerminalNode } from 'antlr4ts/tree/TerminalNode'
+import {
+    parse as babelParse,
+} from '@babel/parser'
 
 export class DisallowedConstructError implements SourceError {
   public type = ErrorType.SYNTAX
@@ -259,6 +262,18 @@ export function parse(source: string, context: Context) {
     } else {
       return undefined
     }
+  } else if (context.variant === 'typescript') {
+          const file = babelParse(source, {
+          sourceType: 'module',
+            plugins: [
+              'typescript', // Parse Typescript syntax instead of Javascript syntax
+              'estree'      // Conform to the ESTree AST specification
+            ]
+          })
+      
+          // Downcast (by force) to an es.Program
+          program = file.program as unknown as es.Program
+          return program
   } else {
     return undefined
   }
