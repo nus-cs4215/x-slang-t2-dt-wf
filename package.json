@@ -14,12 +14,14 @@
     "url": "https://github.com/source-academy/"
   },
   "dependencies": {
+    "@babel/parser": "^7.12.16",
     "@types/estree": "0.0.45",
     "acorn": "^8.0.3",
     "acorn-loose": "^8.0.0",
     "acorn-walk": "^8.0.0",
     "antlr4ts": "^0.5.0-alpha.4",
     "astring": "^1.4.3",
+    "babel-walk": "^3.0.0",
     "gpu.js": "^2.10.4",
     "lodash": "^4.17.20",
     "node-getopt": "^0.3.2",
@@ -65,6 +67,7 @@
     "@typescript-eslint/eslint-plugin": "^4.4.1",
     "@typescript-eslint/parser": "^4.4.1",
     "ace-builds": "^1.4.12",
+    "antlr4ts-cli": "^0.5.0-alpha.4",
     "coveralls": "^3.1.0",
     "escodegen": "^2.0.0",
     "eslint": "^7.11.0",
@@ -76,8 +79,7 @@
     "jsdom": "^16.4.0",
     "prettier": "^2.1.2",
     "ts-jest": "^26.4.1",
-    "typescript": "^4.0.3",
-    "antlr4ts-cli": "^0.5.0-alpha.4"
+    "typescript": "^4.0.3"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -118,3 +120,5 @@
     }
   }
 }
+
+

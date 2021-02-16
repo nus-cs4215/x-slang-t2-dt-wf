@@ -3,6 +3,7 @@ acorn.Node differs from estree.Node, so we have this file to handle the `as any`
  */
 
 import * as walkers from 'acorn-walk'
+import * as babelWalkers from 'babel-walk'
 import { Node } from 'estree'
 export type FullWalkerCallback<TState> = (node: Node, state: TState, type: string) => void
 
@@ -60,6 +61,13 @@ export const ancestor: <TState>(
   base?: RecursiveVisitors<TState>,
   state?: TState
 ) => void = walkers.ancestor as any
+
+export const babelAncestor: <TState>(
+    node: Node,
+    visitors: AncestorVisitors<TState>,
+    base?: RecursiveVisitors<TState>,
+    state?: TState
+) => void = babelWalkers.ancestor as any
 
 export const recursive: <TState>(
   node: Node,

@@ -57,7 +57,7 @@ export interface Comment {
 }
 
 export type ExecutionMethod = 'native' | 'interpreter' | 'auto'
-export type Variant = 'calc'
+export type Variant = 'calc' | 'typescript'
 
 export interface SourceLanguage {
   variant: Variant
