@@ -63,10 +63,10 @@ export const ancestor: <TState>(
 ) => void = walkers.ancestor as any
 
 export const babelAncestor: <TState>(
-    node: Node,
-    visitors: AncestorVisitors<TState>,
-    base?: RecursiveVisitors<TState>,
-    state?: TState
+  node: Node,
+  visitors: AncestorVisitors<TState>,
+  base?: RecursiveVisitors<TState>,
+  state?: TState
 ) => void = babelWalkers.ancestor as any
 
 export const recursive: <TState>(
