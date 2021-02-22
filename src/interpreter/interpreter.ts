@@ -9,6 +9,7 @@ import { evaluateBinaryExpression, evaluateUnaryExpression } from '../utils/oper
 import * as rttc from '../utils/rttc'
 import Closure from './closure'
 
+
 class BreakValue {}
 
 class ContinueValue {}
@@ -126,6 +127,7 @@ function declareFunctionsAndVariables(context: Context, node: es.BlockStatement)
     }
   }
 }
+
 
 function* visit(context: Context, node: es.Node) {
   context.runtime.nodes.unshift(node)
@@ -276,7 +278,7 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     ConditionalExpression: function*(node: es.ConditionalExpression, context: Context) {
-        throw new Error("Conditional expressions not supported in x-slang");
+        return yield* this.IfStatement(node, context)
     },
 
     LogicalExpression: function*(node: es.LogicalExpression, context: Context) {
@@ -313,7 +315,7 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     IfStatement: function*(node: es.IfStatement | es.ConditionalExpression, context: Context) {
-        throw new Error("If statements not supported in x-slang");
+       return yield* evaluate(yield* reduceIf(node, context), context)
     },
 
     ExpressionStatement: function*(node: es.ExpressionStatement, context: Context) {
@@ -348,6 +350,21 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         return result;
     }
 }
+
+function* reduceIf(
+  node: es.IfStatement | es.ConditionalExpression,
+  context: Context
+): IterableIterator<es.Node> {
+  const test = yield* actualValue(node.test, context)
+
+  const error = rttc.checkIfStatement(node, test)
+  if (error) {
+    return handleRuntimeError(context, error)
+  }
+
+  return test ? node.consequent : node.alternate
+}
+
 // tslint:enable:object-literal-shorthand
 
 export function* evaluate(node: es.Node, context: Context) {

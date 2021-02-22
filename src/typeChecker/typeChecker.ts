@@ -79,8 +79,14 @@ function traverse(node: TypeAnnotatedNode<es.Node>, constraints?: Constraint[]) 
     case 'ForStatement':
       throw Error('For statements not supported for x-slang')
     case 'ConditionalExpression': // both cases are the same
-    case 'IfStatement':
-      throw Error('If statements not supported for x-slang')
+    case 'IfStatement': {
+        traverse(node.test, constraints)
+        traverse(node.consequent, constraints)
+        if (node.alternate) {
+          traverse(node.alternate, constraints)
+        }
+        break
+      }
     case 'CallExpression':
       throw Error('Call statements not supported for x-slang')
     case 'ReturnStatement':
