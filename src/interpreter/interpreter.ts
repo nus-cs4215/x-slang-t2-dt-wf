@@ -1,5 +1,6 @@
 /* tslint:disable:max-classes-per-file */
 import * as es from 'estree'
+import * as babel from '@babel/types'
 import * as constants from '../constants'
 import * as errors from '../errors/errors'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
@@ -127,6 +128,37 @@ function declareFunctionsAndVariables(context: Context, node: es.BlockStatement)
   }
 }
 
+function defineVariable(
+  context: Context,
+  name: string,
+  value: Value,
+  node: es.VariableDeclaration
+) {
+  const environment = currentEnvironment(context)
+  if (environment.head[name] !== DECLARED_BUT_NOT_YET_ASSIGNED) {
+    handleRuntimeError(context, new errors.VariableRedeclaration(node, name)) // TODO: why context.runtime.nodes? (js-slang)
+  }
+
+  environment.head[name] = value // TODO: indicate whether constant or not, etc.
+}
+
+function lookupVariable(context: Context, name: string, node: es.Identifier) {
+  let environment: Environment = currentEnvironment(context)
+  while (true) {
+    if (environment.head.hasOwnProperty(name)) {
+      const result = environment.head[name]
+      if (result === DECLARED_BUT_NOT_YET_ASSIGNED) {
+        return handleRuntimeError(context, new errors.UnassignedVariable(name, node))
+      }
+      return result
+    }
+    if (environment.tail === null) {
+      return handleRuntimeError(context, new errors.UndefinedVariable(name, node))
+    }
+    environment = environment.tail
+  }
+}
+
 function* visit(context: Context, node: es.Node) {
   context.runtime.nodes.unshift(node)
   yield context
@@ -231,7 +263,7 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     Identifier: function*(node: es.Identifier, context: Context) {
-        throw new Error("Variables not supported in x-slang");
+        return lookupVariable(context, node.name, node);
     },
 
     CallExpression: function*(node: es.CallExpression, context: Context) {
@@ -284,7 +316,25 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     VariableDeclaration: function*(node: es.VariableDeclaration, context: Context) {
-        throw new Error("Variable declarations not supported in x-slang");
+        if (node.kind !== 'const') {
+            throw new Error(`${node.kind} statements not supported in x-slang`);
+        }
+        // We only allow one variable declaration per line
+        const declaration = node.declarations[0];
+        const id = declaration.id;
+        if (!rttc.isIdentifier(id)) {
+          throw new Error(`${id.type}s in variable declarations are not supported in x-slang`);
+        } else if (!declaration.init) {
+          throw new Error('Constants must be initialised upon declaration');
+        }
+        const init = yield* actualValue(declaration.init, context);
+        // TODO: migrate to babel types
+        const error = rttc.checkVariableDeclaration(node as unknown as babel.Node, id as unknown as babel.Identifier, init) 
+        if (error) {
+            return handleRuntimeError(context, error)
+        }
+        defineVariable(context, id.name, init, node);
+        return undefined;
     },
 
     ContinueStatement: function*(node: es.ContinueStatement, context: Context) {
@@ -372,6 +422,7 @@ function* reduceIf(
 
 export function* evaluate(node: es.Node, context: Context) {
   yield* visit(context, node)
+  console.log(node)
   const result = yield* evaluators[node.type](node, context)
   yield* leave(context)
   return result

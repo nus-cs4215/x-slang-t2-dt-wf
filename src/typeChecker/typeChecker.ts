@@ -96,7 +96,8 @@ function traverse(node: TypeAnnotatedNode<es.Node>, constraints?: Constraint[]) 
     case 'ReturnStatement':
       throw Error('Return statements not supported for x-slang')
     case 'VariableDeclaration':
-      throw Error('Variable statements not supported for x-slang')
+      // TODO: figure out what this does / what to do with it
+      break
     case 'ArrowFunctionExpression':
       throw Error('Arrow functions not supported for x-slang')
     case 'FunctionDeclaration':
