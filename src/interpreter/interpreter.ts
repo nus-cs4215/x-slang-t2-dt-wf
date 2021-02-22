@@ -9,7 +9,6 @@ import { evaluateBinaryExpression, evaluateUnaryExpression } from '../utils/oper
 import * as rttc from '../utils/rttc'
 import Closure from './closure'
 
-
 class BreakValue {}
 
 class ContinueValue {}
@@ -127,7 +126,6 @@ function declareFunctionsAndVariables(context: Context, node: es.BlockStatement)
     }
   }
 }
-
 
 function* visit(context: Context, node: es.Node) {
   context.runtime.nodes.unshift(node)
@@ -335,7 +333,12 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     BlockStatement: function*(node: es.BlockStatement, context: Context) {
-        throw new Error("Block statements not supported in x-slang");
+      // Create a new environment (block scoping)
+      const environment = createBlockEnvironment(context, 'blockEnvironment')
+      pushEnvironment(context, environment)
+      const result: Value = yield* evaluateBlockSatement(context, node)
+      popEnvironment(context)
+      return result
     },
 
     ImportDeclaration: function*(node: es.ImportDeclaration, context: Context) {

@@ -72,21 +72,25 @@ function traverse(node: TypeAnnotatedNode<es.Node>, constraints?: Constraint[]) 
       traverse(node.expression, constraints)
       break
     }
-    case 'BlockStatement':
-      throw Error('Block statements not supported for x-slang')
+    case 'BlockStatement': {
+      node.body.forEach(nodeBody => {
+        traverse(nodeBody, constraints)
+      })
+      break
+    }
     case 'WhileStatement':
       throw Error('While statements not supported for x-slang')
     case 'ForStatement':
       throw Error('For statements not supported for x-slang')
     case 'ConditionalExpression': // both cases are the same
     case 'IfStatement': {
-        traverse(node.test, constraints)
-        traverse(node.consequent, constraints)
-        if (node.alternate) {
-          traverse(node.alternate, constraints)
-        }
-        break
+      traverse(node.test, constraints)
+      traverse(node.consequent, constraints)
+      if (node.alternate) {
+        traverse(node.alternate, constraints)
       }
+      break
+    }
     case 'CallExpression':
       throw Error('Call statements not supported for x-slang')
     case 'ReturnStatement':
