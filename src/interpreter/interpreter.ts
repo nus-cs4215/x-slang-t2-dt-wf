@@ -170,7 +170,7 @@ const checkNumberOfArguments = (
 
 export type Evaluator<T extends es.Node> = (node: T, context: Context) => IterableIterator<Value>
 
-function* evaluateBlockSatement(context: Context, node: es.BlockStatement) {
+function* evaluateBlockStatement(context: Context, node: es.BlockStatement) {
   declareFunctionsAndVariables(context, node)
   let result
   for (const statement of node.body) {
@@ -336,7 +336,7 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
       // Create a new environment (block scoping)
       const environment = createBlockEnvironment(context, 'blockEnvironment')
       pushEnvironment(context, environment)
-      const result: Value = yield* evaluateBlockSatement(context, node)
+      const result: Value = yield* evaluateBlockStatement(context, node)
       popEnvironment(context)
       return result
     },
@@ -349,7 +349,7 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         context.numberOfOuterEnvironments += 1
         const environment = createBlockEnvironment(context, 'programEnvironment')
         pushEnvironment(context, environment)
-        const result = yield* forceIt(yield* evaluateBlockSatement(context, node), context);
+        const result = yield* forceIt(yield* evaluateBlockStatement(context, node), context);
         return result;
     }
 }
@@ -400,7 +400,7 @@ export function* apply(
       const bodyEnvironment = createBlockEnvironment(context, 'functionBodyEnvironment')
       bodyEnvironment.thisContext = thisContext
       pushEnvironment(context, bodyEnvironment)
-      result = yield* evaluateBlockSatement(context, fun.node.body as es.BlockStatement)
+      result = yield* evaluateBlockStatement(context, fun.node.body as es.BlockStatement)
       popEnvironment(context)
       if (result instanceof TailCallReturnValue) {
         fun = result.callee
