@@ -96,7 +96,10 @@ function traverse(node: TypeAnnotatedNode<es.Node>, constraints?: Constraint[]) 
     case 'ReturnStatement':
       throw Error('Return statements not supported for x-slang')
     case 'VariableDeclaration':
-      // TODO: figure out what this does / what to do with it
+      // NOTE: there should only be one declaration anyway
+      for (const declaration of node.declarations) {
+        declaration.init && traverse(declaration.init, constraints)
+      }
       break
     case 'ArrowFunctionExpression':
       throw Error('Arrow functions not supported for x-slang')
@@ -660,6 +663,7 @@ function _infer(
       throw Error('Unexpected literal type')
     }
     case 'Identifier':
+      // TODO: implement if needed
       throw Error('Identifiers not supported for x-slang')
     case 'ConditionalExpression': // both cases are the same
       throw Error('Conditional expressions not supported for x-slang')
@@ -668,6 +672,7 @@ function _infer(
     case 'ArrowFunctionExpression':
       throw Error('Arrow functions not supported for x-slang')
     case 'VariableDeclaration':
+      // TODO: implement if needed
       throw Error('Variable declarations not supported for x-slang')
     case 'FunctionDeclaration':
       throw Error('Function declarations not supported for x-slang')

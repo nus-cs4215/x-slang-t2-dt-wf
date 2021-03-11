@@ -4,7 +4,15 @@ import * as babel from '@babel/types'
 import * as constants from '../constants'
 import * as errors from '../errors/errors'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
-import { Context, Environment, Frame, Value } from '../types'
+import {
+  Context,
+  DECLARED_BUT_NOT_YET_ASSIGNED,
+  Environment,
+  Frame,
+  isIdentifier,
+  TypeAnnotatedNode,
+  Value
+} from '../types'
 import { primitive } from '../utils/astCreator'
 import { evaluateBinaryExpression, evaluateUnaryExpression } from '../utils/operators'
 import * as rttc from '../utils/rttc'
@@ -22,6 +30,7 @@ class TailCallReturnValue {
   constructor(public callee: Closure, public args: Value[], public node: es.CallExpression) {}
 }
 
+// TODO: remove for convenience? (not lazy)
 class Thunk {
   public value: Value
   public isMemoized: boolean
@@ -58,7 +67,7 @@ const createEnvironment = (
   const environment: Environment = {
     name: closure.functionName, // TODO: Change this
     tail: closure.environment,
-    head: {}
+    head: makeEmptyFrame()
   }
   if (callExpression) {
     environment.callExpression = {
@@ -67,8 +76,8 @@ const createEnvironment = (
     }
   }
   closure.node.params.forEach((param, index) => {
-    const ident = param as es.Identifier
-    environment.head[ident.name] = args[index]
+    const identifier = param as es.Identifier
+    environment.head.values[identifier.name] = args[index]
   })
   return environment
 }
@@ -76,7 +85,7 @@ const createEnvironment = (
 const createBlockEnvironment = (
   context: Context,
   name = 'blockEnvironment',
-  head: Frame = {}
+  head: Frame = makeEmptyFrame()
 ): Environment => {
   return {
     name,
@@ -93,19 +102,17 @@ const handleRuntimeError = (context: Context, error: RuntimeSourceError): never 
   throw error
 }
 
-const DECLARED_BUT_NOT_YET_ASSIGNED = Symbol('Used to implement hoisting')
-
-function declareIdentifier(context: Context, name: string, node: es.Node) {
+function declareIdentifier(context: Context, name: string, node: TypeAnnotatedNode<es.Node>) {
   const environment = currentEnvironment(context)
-  if (environment.head.hasOwnProperty(name)) {
-    const descriptors = Object.getOwnPropertyDescriptors(environment.head)
+  if (environment.head.values.hasOwnProperty(name)) {
+    const descriptors = Object.getOwnPropertyDescriptors(environment.head.values)
 
     return handleRuntimeError(
       context,
       new errors.VariableRedeclaration(node, name, descriptors[name].writable)
     )
   }
-  environment.head[name] = DECLARED_BUT_NOT_YET_ASSIGNED
+  environment.head.values[name] = DECLARED_BUT_NOT_YET_ASSIGNED
   return environment
 }
 
@@ -130,27 +137,38 @@ function declareFunctionsAndVariables(context: Context, node: es.BlockStatement)
 
 function defineVariable(
   context: Context,
-  name: string,
+  id: babel.Identifier, // note that identifiers are not type annotated in typeChecker
   value: Value,
-  node: es.VariableDeclaration
+  node: TypeAnnotatedNode<es.VariableDeclaration>
 ) {
+  const name = id.name
   const environment = currentEnvironment(context)
-  if (environment.head[name] !== DECLARED_BUT_NOT_YET_ASSIGNED) {
-    handleRuntimeError(context, new errors.VariableRedeclaration(node, name)) // TODO: why context.runtime.nodes? (js-slang)
+  // TODO: precedence of errors?
+  if (environment.head.values[name] !== DECLARED_BUT_NOT_YET_ASSIGNED) {
+    // TODO: why does js-slang use context.runtime.nodes?
+    handleRuntimeError(context, new errors.VariableRedeclaration(node, name))
   }
 
-  environment.head[name] = value // TODO: indicate whether constant or not, etc.
+  if (!node.inferredType) {
+    // TODO: ensure that this doesn't happen
+    throw new Error(`No inferred type for node: ${JSON.stringify(node, null, 2)}`)
+  }
+  // TODO: use JS object properties to define whether constant or not, etc.
+  environment.head.values[name] = {
+    type: node.inferredType, // parser should have checked this
+    value: value
+  }
 }
 
 function lookupVariable(context: Context, name: string, node: es.Identifier) {
   let environment: Environment = currentEnvironment(context)
   while (true) {
-    if (environment.head.hasOwnProperty(name)) {
-      const result = environment.head[name]
+    if (environment.head.values.hasOwnProperty(name)) {
+      const result = environment.head.values[name]
       if (result === DECLARED_BUT_NOT_YET_ASSIGNED) {
         return handleRuntimeError(context, new errors.UnassignedVariable(name, node))
       }
-      return result
+      return result.value // TODO: return the result type too
     }
     if (environment.tail === null) {
       return handleRuntimeError(context, new errors.UndefinedVariable(name, node))
@@ -175,6 +193,8 @@ const replaceEnvironment = (context: Context, environment: Environment) =>
 const popEnvironment = (context: Context) => context.runtime.environments.shift()
 const pushEnvironment = (context: Context, environment: Environment) =>
   context.runtime.environments.unshift(environment)
+
+const makeEmptyFrame = () => ({ types: {}, values: {} })
 
 const checkNumberOfArguments = (
   context: Context,
@@ -203,6 +223,7 @@ const checkNumberOfArguments = (
 export type Evaluator<T extends es.Node> = (node: T, context: Context) => IterableIterator<Value>
 
 function* evaluateBlockStatement(context: Context, node: es.BlockStatement) {
+  // TODO: declare types
   declareFunctionsAndVariables(context, node)
   let result
   for (const statement of node.body) {
@@ -322,18 +343,19 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         // We only allow one variable declaration per line
         const declaration = node.declarations[0];
         const id = declaration.id;
-        if (!rttc.isIdentifier(id)) {
-          throw new Error(`${id.type}s in variable declarations are not supported in x-slang`);
+        if (!isIdentifier(id)) {
+            throw new Error(`${id.type}s in variable declarations are not supported in x-slang`);
         } else if (!declaration.init) {
-          throw new Error('Constants must be initialised upon declaration');
+            throw new Error('Constants must be initialised upon declaration');
         }
-        const init = yield* actualValue(declaration.init, context);
+        const initValue = yield* actualValue(declaration.init, context);
         // TODO: migrate to babel types
-        const error = rttc.checkVariableDeclaration(node as unknown as babel.Node, id as unknown as babel.Identifier, init) 
+        // TODO: add type information for each contraction step and use that for type checking
+        const error = rttc.checkVariableDeclaration(node as unknown as babel.Node, id as unknown as babel.Identifier, initValue) 
         if (error) {
             return handleRuntimeError(context, error)
         }
-        defineVariable(context, id.name, init, node);
+        defineVariable(context, id as unknown as babel.Identifier, initValue, node);
         return undefined;
     },
 
@@ -420,7 +442,8 @@ function* reduceIf(
 
 // tslint:enable:object-literal-shorthand
 
-export function* evaluate(node: es.Node, context: Context) {
+// TODO: type annotated node
+export function* evaluate(node: TypeAnnotatedNode<es.Node>, context: Context) {
   yield* visit(context, node)
   console.log(node)
   const result = yield* evaluators[node.type](node, context)

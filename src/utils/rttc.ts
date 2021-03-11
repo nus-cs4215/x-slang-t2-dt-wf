@@ -1,7 +1,7 @@
 import * as es from 'estree'
 import * as babel from '@babel/types'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
-import { ErrorSeverity, ErrorType, Value } from '../types'
+import { ErrorSeverity, ErrorType, TypeAnnotatedNode, Value } from '../types'
 
 const LHS = ' on left hand side of operation'
 const RHS = ' on right hand side of operation'
@@ -157,12 +157,18 @@ export const checkMemberAccess = (node: es.Node, obj: Value, prop: Value) => {
   }
 }
 
-export const checkVariableDeclaration = (node: babel.Node, id: babel.Identifier, init: Value) => {
+export const checkVariableDeclaration = (
+  node: TypeAnnotatedNode<babel.Node>,
+  id: babel.Identifier,
+  init: Value
+) => {
+  // TODO: use inferred types instead of type annotations for type checking?
   if (!id.typeAnnotation) {
     return new TypeError(node, ' after name declaration', 'type annotation', 'none')
   } else if (id.typeAnnotation.type !== 'TSTypeAnnotation') {
     return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type)
   } else if (!babel.isTSBaseType(id.typeAnnotation.typeAnnotation)) {
+    // TODO: implement other types (e.g. functions)
     return new TypeError(node, '', 'TypeScript base type', id.typeAnnotation.typeAnnotation.type)
   } else if (!isMatchingType(id.typeAnnotation.typeAnnotation, init)) {
     return new TypeError(
@@ -174,8 +180,4 @@ export const checkVariableDeclaration = (node: babel.Node, id: babel.Identifier,
   } else {
     return undefined
   }
-}
-
-export const isIdentifier = (node: any): node is es.Identifier => {
-  return (node as es.Identifier).name !== undefined
 }

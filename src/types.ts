@@ -139,11 +139,22 @@ export interface DefinitionNode {
   loc?: es.SourceLocation | null
 }
 
+export const DECLARED_BUT_NOT_YET_ASSIGNED = Symbol('Used to implement hoisting in interpreter')
+
 // tslint:disable:no-any
 export interface Frame {
-  [name: string]: any
+  types: {
+    [name: string]: Type
+  }
+  values: {
+    [name: string]: TypedValue | typeof DECLARED_BUT_NOT_YET_ASSIGNED
+  }
 }
 export type Value = any
+export interface TypedValue {
+  type: Type
+  value: Value
+}
 // tslint:enable:no-any
 
 export type AllowedDeclarations = 'const' | 'let'
@@ -219,7 +230,7 @@ export interface BlockExpression extends es.BaseExpression {
 
 export type substituterNodes = es.Node | BlockExpression
 
-export type TypeAnnotatedNode<T extends es.Node> = TypeAnnotation & T
+export type TypeAnnotatedNode<T extends es.Node | babel.Node> = TypeAnnotation & T
 
 export type TypeAnnotatedFuncDecl = TypeAnnotatedNode<es.FunctionDeclaration> & TypedFuncDecl
 
@@ -290,3 +301,11 @@ export type TypeEnvironment = {
   typeMap: Map<string, Type | ForAll>
   declKindMap: Map<string, AllowedDeclarations>
 }[]
+
+/**
+ * Utility functions for type narrowing.
+ */
+
+export const isIdentifier = (node: es.Pattern): node is es.Identifier => {
+  return node.type === 'Identifier'
+}
