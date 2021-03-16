@@ -123,3 +123,24 @@ export class InvalidArgumentTypesError implements SourceError {
     return this.explain()
   }
 }
+
+export class UndefinedIdentifierError implements SourceError {
+  public type = ErrorType.TYPE
+  public severity = ErrorSeverity.WARNING
+
+  constructor(public node: TypeAnnotatedNode<es.Identifier>, public name: string) {}
+
+  get location() {
+    return this.node.loc!
+  }
+
+  public explain() {
+    return stripIndent`
+    Undeclared name '${this.name}' detected
+    `
+  }
+
+  public elaborate() {
+    return this.explain()
+  }
+}
