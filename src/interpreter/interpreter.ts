@@ -143,19 +143,21 @@ function defineVariable(
 ) {
   const name = id.name
   const environment = currentEnvironment(context)
-  // TODO: precedence of errors?
   if (environment.head.values[name] !== DECLARED_BUT_NOT_YET_ASSIGNED) {
     // TODO: why does js-slang use context.runtime.nodes?
     handleRuntimeError(context, new errors.VariableRedeclaration(node, name))
   }
 
-  if (!node.inferredType) {
+  const inferredType = node.inferredType
+  if (!inferredType) {
     // TODO: ensure that this doesn't happen
     throw new Error(`No inferred type for node: ${JSON.stringify(node, null, 2)}`)
+  } else if (inferredType.kind !== 'primitive') {
+    throw new Error('Only primitive types supported for now') // HACK: temporarily disabled
   }
   // TODO: use JS object properties to define whether constant or not, etc.
   environment.head.values[name] = {
-    type: node.inferredType, // parser should have checked this
+    type: inferredType.name, // FIXME: create a runtime type based on the type annotation (or inferred?)
     value: value
   }
 }
@@ -351,7 +353,7 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         const initValue = yield* actualValue(declaration.init, context);
         // TODO: migrate to babel types
         // TODO: add type information for each contraction step and use that for type checking
-        const error = rttc.checkVariableDeclaration(node as unknown as babel.Node, id as unknown as babel.Identifier, initValue) 
+        const error = rttc.checkVariableDeclaration(node as unknown as babel.VariableDeclaration, id as unknown as babel.Identifier, initValue) 
         if (error) {
             return handleRuntimeError(context, error)
         }
@@ -445,7 +447,7 @@ function* reduceIf(
 // TODO: type annotated node
 export function* evaluate(node: TypeAnnotatedNode<es.Node>, context: Context) {
   yield* visit(context, node)
-  console.log(node)
+  // console.log(node)
   const result = yield* evaluators[node.type](node, context)
   yield* leave(context)
   return result

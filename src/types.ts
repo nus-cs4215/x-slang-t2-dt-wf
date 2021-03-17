@@ -141,10 +141,17 @@ export interface DefinitionNode {
 
 export const DECLARED_BUT_NOT_YET_ASSIGNED = Symbol('Used to implement hoisting in interpreter')
 
+export type RuntimeType = RuntimeNumber | RuntimeBoolean | RuntimeString | RuntimeUndefined
+
+export type RuntimeNumber = 'number'
+export type RuntimeBoolean = 'boolean'
+export type RuntimeString = 'string'
+export type RuntimeUndefined = 'undefined'
+
 // tslint:disable:no-any
 export interface Frame {
   types: {
-    [name: string]: Type
+    [name: string]: RuntimeType
   }
   values: {
     [name: string]: TypedValue | typeof DECLARED_BUT_NOT_YET_ASSIGNED
@@ -152,7 +159,7 @@ export interface Frame {
 }
 export type Value = any
 export interface TypedValue {
-  type: Type
+  type: RuntimeType
   value: Value
 }
 // tslint:enable:no-any
@@ -255,7 +262,7 @@ export interface Typed {
   inferredType?: Type
 }
 
-export type Type = Primitive | Variable | FunctionType | List | Pair | SArray
+export type Type = Primitive | Variable | FunctionType | List | Pair | SArray | Any
 export type Constraint = 'none' | 'addable'
 
 export interface Primitive {
@@ -290,6 +297,10 @@ export interface Pair {
   kind: 'pair'
   headType: Type
   tailType: Type
+}
+
+export interface Any {
+  kind: 'any'
 }
 
 export interface ForAll {

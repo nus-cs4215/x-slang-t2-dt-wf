@@ -101,6 +101,7 @@ function traverse(node: TypeAnnotatedNode<es.Node>, constraints?: Constraint[]) 
     case 'ReturnStatement':
       throw Error('Return statements not supported for x-slang')
     case 'VariableDeclaration':
+      // TODO: traverse Identifier to handle type annotation?
       // NOTE: there should only be one declaration anyway
       for (const declaration of node.declarations) {
         declaration.init && traverse(declaration.init, constraints)
@@ -189,6 +190,7 @@ function freshTypeVar(typeVar: Variable): Variable {
 function fresh(monoType: Type, subst: { [typeName: string]: Variable }): Type {
   switch (monoType.kind) {
     case 'primitive':
+    case 'any': // TODO: check
       return monoType
     case 'list':
       return {
@@ -231,6 +233,7 @@ function union(a: Variable[], b: Variable[]): Variable[] {
 function freeTypeVarsInType(type: Type): Variable[] {
   switch (type.kind) {
     case 'primitive':
+    case 'any': // TODO: check
       return []
     case 'list':
       return freeTypeVarsInType(type.elementType)
@@ -324,6 +327,11 @@ function applyConstraints(type: Type, constraints: Constraint[]): Type {
         returnType: applyConstraints(type.returnType, constraints)
       }
     }
+    case 'any':
+      // TODO: figure out what to do (this is a temp fix)
+      return {
+        kind: 'any'
+      }
   }
 }
 
@@ -336,6 +344,7 @@ function applyConstraints(type: Type, constraints: Constraint[]): Type {
 function contains(type: Type, name: string): boolean {
   switch (type.kind) {
     case 'primitive':
+    case 'any':
       return false
     case 'pair':
       return contains(type.headType, name) || contains(type.tailType, name)
