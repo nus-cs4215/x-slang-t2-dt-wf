@@ -17,7 +17,7 @@ const createEmptyRuntime = () => ({
 const createGlobalEnvironment = () => ({
   tail: null,
   name: 'global',
-  head: {}
+  head: { types: {}, values: {} }
 })
 
 export const createEmptyContext = <T>(

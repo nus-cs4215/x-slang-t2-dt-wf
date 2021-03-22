@@ -139,11 +139,29 @@ export interface DefinitionNode {
   loc?: es.SourceLocation | null
 }
 
+export const DECLARED_BUT_NOT_YET_ASSIGNED = Symbol('Used to implement hoisting in interpreter')
+
+export type RuntimeType = RuntimeNumber | RuntimeBoolean | RuntimeString | RuntimeUndefined
+
+export type RuntimeNumber = 'number'
+export type RuntimeBoolean = 'boolean'
+export type RuntimeString = 'string'
+export type RuntimeUndefined = 'undefined'
+
 // tslint:disable:no-any
 export interface Frame {
-  [name: string]: any
+  types: {
+    [name: string]: RuntimeType
+  }
+  values: {
+    [name: string]: TypedValue | typeof DECLARED_BUT_NOT_YET_ASSIGNED
+  }
 }
 export type Value = any
+export interface TypedValue {
+  type: RuntimeType
+  value: Value
+}
 // tslint:enable:no-any
 
 export type AllowedDeclarations = 'const' | 'let'
@@ -219,7 +237,7 @@ export interface BlockExpression extends es.BaseExpression {
 
 export type substituterNodes = es.Node | BlockExpression
 
-export type TypeAnnotatedNode<T extends es.Node> = TypeAnnotation & T
+export type TypeAnnotatedNode<T extends es.Node | babel.Node> = TypeAnnotation & T
 
 export type TypeAnnotatedFuncDecl = TypeAnnotatedNode<es.FunctionDeclaration> & TypedFuncDecl
 
@@ -244,7 +262,7 @@ export interface Typed {
   inferredType?: Type
 }
 
-export type Type = Primitive | Variable | FunctionType | List | Pair | SArray
+export type Type = Primitive | Variable | FunctionType | List | Pair | SArray | Any
 export type Constraint = 'none' | 'addable'
 
 export interface Primitive {
@@ -281,6 +299,10 @@ export interface Pair {
   tailType: Type
 }
 
+export interface Any {
+  kind: 'any'
+}
+
 export interface ForAll {
   kind: 'forall'
   polyType: Type
@@ -290,3 +312,11 @@ export type TypeEnvironment = {
   typeMap: Map<string, Type | ForAll>
   declKindMap: Map<string, AllowedDeclarations>
 }[]
+
+/**
+ * Utility functions for type narrowing.
+ */
+
+export const isIdentifier = (node: es.Pattern): node is es.Identifier => {
+  return node.type === 'Identifier'
+}

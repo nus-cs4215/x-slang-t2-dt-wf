@@ -10,7 +10,8 @@ import {
   Type,
   FunctionType,
   SourceError,
-  TypeEnvironment
+  TypeEnvironment,
+  AllowedDeclarations
 } from '../types'
 import {
   TypeError,
@@ -19,7 +20,11 @@ import {
   InternalDifferentNumberArgumentsError,
   InternalCyclicReferenceError
 } from './internalTypeErrors'
-import { InvalidArgumentTypesError, CyclicReferenceError } from '../errors/typeErrors'
+import {
+  InvalidArgumentTypesError,
+  CyclicReferenceError,
+  UndefinedIdentifierError
+} from '../errors/typeErrors'
 
 /** Name of Unary negative builtin operator */
 const NEGATIVE_OP = '-_1'
@@ -96,7 +101,12 @@ function traverse(node: TypeAnnotatedNode<es.Node>, constraints?: Constraint[]) 
     case 'ReturnStatement':
       throw Error('Return statements not supported for x-slang')
     case 'VariableDeclaration':
-      throw Error('Variable statements not supported for x-slang')
+      // TODO: traverse Identifier to handle type annotation?
+      // NOTE: there should only be one declaration anyway
+      for (const declaration of node.declarations) {
+        declaration.init && traverse(declaration.init, constraints)
+      }
+      break
     case 'ArrowFunctionExpression':
       throw Error('Arrow functions not supported for x-slang')
     case 'FunctionDeclaration':
@@ -180,6 +190,7 @@ function freshTypeVar(typeVar: Variable): Variable {
 function fresh(monoType: Type, subst: { [typeName: string]: Variable }): Type {
   switch (monoType.kind) {
     case 'primitive':
+    case 'any': // TODO: check
       return monoType
     case 'list':
       return {
@@ -222,6 +233,7 @@ function union(a: Variable[], b: Variable[]): Variable[] {
 function freeTypeVarsInType(type: Type): Variable[] {
   switch (type.kind) {
     case 'primitive':
+    case 'any': // TODO: check
       return []
     case 'list':
       return freeTypeVarsInType(type.elementType)
@@ -315,6 +327,11 @@ function applyConstraints(type: Type, constraints: Constraint[]): Type {
         returnType: applyConstraints(type.returnType, constraints)
       }
     }
+    case 'any':
+      // TODO: figure out what to do (this is a temp fix)
+      return {
+        kind: 'any'
+      }
   }
 }
 
@@ -327,6 +344,7 @@ function applyConstraints(type: Type, constraints: Constraint[]): Type {
 function contains(type: Type, name: string): boolean {
   switch (type.kind) {
     case 'primitive':
+    case 'any':
       return false
     case 'pair':
       return contains(type.headType, name) || contains(type.tailType, name)
@@ -522,6 +540,14 @@ function lookupType(name: string, env: Env): Type | ForAll | undefined {
   return undefined
 }
 
+function setType(name: string, type: Type | ForAll, env: Env) {
+  env[env.length - 1].typeMap.set(name, type)
+}
+
+function setDeclKind(name: string, kind: AllowedDeclarations, env: Env) {
+  env[env.length - 1].declKindMap.set(name, kind)
+}
+
 function pushEnv(env: Env) {
   env.push({ typeMap: new Map(), declKindMap: new Map() })
 }
@@ -615,12 +641,51 @@ function _infer(
     case 'ForStatement':
       throw Error('Return statements not supported for x-slang')
     case 'BlockStatement':
-      throw Error('Block statements not supported for x-slang')
     case 'Program': {
       pushEnv(env)
+      for (const statement of node.body) {
+        if (statement.type === 'ImportDeclaration') {
+          for (const specifier of statement.specifiers) {
+            if (specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier') {
+              setType(specifier.imported.name, tForAll(tVar('T1')), env)
+              setDeclKind(specifier.imported.name, 'const', env)
+            }
+          }
+        }
+      }
       const lastStatementIndex = node.body.length - 1
       const returnValNodeIndex = returnBlockValueNodeIndexFor(node, isTopLevelAndLastValStmt)
-      const lastDeclNodeIndex = -1
+      let lastDeclNodeIndex = -1
+      let lastDeclFound = false
+      let n = lastStatementIndex
+      const declNodes: TypeAnnotatedNode<es.VariableDeclaration>[] = []
+      while (n >= 0) {
+        const currNode = node.body[n]
+        if (currNode.type === 'VariableDeclaration') {
+          // in the event we havent yet found our last decl
+          if (!lastDeclFound) {
+            lastDeclFound = true
+            lastDeclNodeIndex = n
+          }
+          declNodes.push(currNode)
+        }
+        n--
+      }
+      declNodes.forEach(declNode => {
+        if (
+          declNode.type === 'VariableDeclaration' &&
+          declNode.kind !== 'var' &&
+          declNode.declarations[0].id.type === 'Identifier'
+        ) {
+          const declName = declNode.declarations[0].id.name
+          setType(
+            declName,
+            (declNode.declarations[0].init as TypeAnnotatedNode<es.Node>).inferredType as Variable,
+            env
+          )
+          setDeclKind(declName, declNode.kind, env)
+        }
+      })
       const lastNode = node.body[returnValNodeIndex] as TypeAnnotatedNode<es.Node>
       const lastNodeType = (isTopLevelAndLastValStmt && lastNode.type === 'ExpressionStatement'
         ? (lastNode.expression as TypeAnnotatedNode<es.Node>).inferredType
@@ -633,6 +698,24 @@ function _infer(
           newConstraints = infer(node.body[i], env, newConstraints)
         }
       }
+      declNodes.forEach(declNode => {
+        if (
+          declNode.type === 'VariableDeclaration' &&
+          declNode.declarations[0].id.type === 'Identifier'
+        ) {
+          setType(
+            declNode.declarations[0].id.name,
+            tForAll(
+              applyConstraints(
+                (declNode.declarations[0].init as TypeAnnotatedNode<es.Node>)
+                  .inferredType as Variable,
+                newConstraints
+              )
+            ),
+            env
+          )
+        }
+      })
       for (let i = lastDeclNodeIndex + 1; i <= lastStatementIndex; i++) {
         // for the last statement, if it is an if statement, pass down isLastStatementinBlock variable
         const checkedNode = node.body[i]
@@ -641,6 +724,10 @@ function _infer(
         } else {
           newConstraints = infer(checkedNode, env, newConstraints)
         }
+      }
+      if (node.type === 'BlockStatement') {
+        // if program, we want to save the types there, so only pop for blocks
+        env.pop()
       }
       return newConstraints
     }
@@ -659,7 +746,20 @@ function _infer(
       throw Error('Unexpected literal type')
     }
     case 'Identifier':
-      throw Error('Identifiers not supported for x-slang')
+      const identifierName = node.name
+      const envType = lookupType(identifierName, env)
+      if (envType !== undefined) {
+        if (envType.kind === 'forall') {
+          return addToConstraintList(constraints, [
+            storedType,
+            extractFreeVariablesAndGenFresh(envType)
+          ])
+        } else {
+          return addToConstraintList(constraints, [storedType, envType])
+        }
+      }
+      typeErrors.push(new UndefinedIdentifierError(node, identifierName))
+      return constraints
     case 'ConditionalExpression': // both cases are the same
       throw Error('Conditional expressions not supported for x-slang')
     case 'IfStatement':
@@ -667,7 +767,8 @@ function _infer(
     case 'ArrowFunctionExpression':
       throw Error('Arrow functions not supported for x-slang')
     case 'VariableDeclaration':
-      throw Error('Variable declarations not supported for x-slang')
+      const initNode = node.declarations[0].init!
+      return infer(initNode, env, addToConstraintList(constraints, [storedType, tUndef]))
     case 'FunctionDeclaration':
       throw Error('Function declarations not supported for x-slang')
     case 'CallExpression':

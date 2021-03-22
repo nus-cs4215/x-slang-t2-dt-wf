@@ -1,6 +1,7 @@
 import * as es from 'estree'
+import * as babel from '@babel/types'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
-import { ErrorSeverity, ErrorType, Value } from '../types'
+import { ErrorSeverity, ErrorType, RuntimeType, Type, TypeAnnotatedNode, Value } from '../types'
 
 const LHS = ' on left hand side of operation'
 const RHS = ' on right hand side of operation'
@@ -10,7 +11,12 @@ export class TypeError extends RuntimeSourceError {
   public severity = ErrorSeverity.ERROR
   public location: es.SourceLocation
 
-  constructor(node: es.Node, public side: string, public expected: string, public got: string) {
+  constructor(
+    node: es.Node | babel.Node,
+    public side: string,
+    public expected: string,
+    public got: string
+  ) {
     super(node)
   }
 
@@ -43,6 +49,46 @@ const isString = (v: Value) => typeOf(v) === 'string'
 const isBool = (v: Value) => typeOf(v) === 'boolean'
 const isObject = (v: Value) => typeOf(v) === 'object'
 const isArray = (v: Value) => typeOf(v) === 'array'
+
+// TODO: move this to typeChecker if useful
+// const getCorrespondingType = (t: babel.TSBaseType) => {
+//   switch (t.type) {
+//     case 'TSAnyKeyword':
+//       return 'any'
+//     case 'TSBigIntKeyword':
+//       throw new Error('BigInts are not supported in x-slang')
+//     case 'TSBooleanKeyword':
+//       return 'boolean'
+//     case 'TSIntrinsicKeyword':
+//       throw new Error('TS Intrinsic Keywords are not supported in x-slang')
+//     case 'TSLiteralType':
+//       throw new Error('TS Literal Types are not supported in x-slang')
+//     case 'TSNeverKeyword':
+//       throw new Error('TS Never Keywords are not supported in x-slang')
+//     case 'TSNullKeyword':
+//       return 'null'
+//     case 'TSNumberKeyword':
+//       return 'number'
+//     case 'TSObjectKeyword':
+//       throw new Error('TS Object Keywords are not supported in x-slang')
+//     case 'TSStringKeyword':
+//       return 'string'
+//     case 'TSSymbolKeyword':
+//       throw new Error('TS Symbol Keywords are not supported in x-slang')
+//     case 'TSThisType':
+//       throw new Error('TS This Types are not supported in x-slang')
+//     case 'TSUndefinedKeyword':
+//       throw new Error('TS Undefined Keywords are not supported in x-slang') // TODO: handle this
+//     case 'TSVoidKeyword':
+//       throw new Error('TS Void Keywords are not supported in x-slang') // TODO: when adding functions
+//     default:
+//       throw new Error(`Unknown type in getCorrespondingType: ${t.type}`)
+//   }
+// }
+
+const isMatchingType = (inferredType: Type, rtType: RuntimeType) => {
+  return false
+}
 
 export const checkUnaryExpression = (node: es.Node, operator: es.UnaryOperator, value: Value) => {
   if ((operator === '+' || operator === '-') && !isNumber(value)) {
@@ -109,6 +155,26 @@ export const checkMemberAccess = (node: es.Node, obj: Value, prop: Value) => {
   }
 }
 
-export const isIdentifier = (node: any): node is es.Identifier => {
-  return (node as es.Identifier).name !== undefined
+export const checkVariableDeclaration = (
+  node: TypeAnnotatedNode<babel.VariableDeclaration>,
+  id: babel.Identifier,
+  init: Value
+) => {
+  return undefined
+  // // Two cases to check: If the variable type is dynamic, and if the initial value is dynamic
+  // if (node.inferredType?.kind !== 'any') {
+  //   // will already have been checked statically
+  //   return undefined
+  // }
+
+  // if (!isMatchingType(node.inferredType, init)) {
+  //   return new TypeError(
+  //     node,
+  //     ` as initial value of variable "${id.name}"`,
+  //     node.inferredType.kind, // how to get inferred type of name? -- it's looked up in the type checker's type environment...
+  //     typeOf(init)
+  //   )
+  // } else {
+  //   return undefined
+  // }
 }
