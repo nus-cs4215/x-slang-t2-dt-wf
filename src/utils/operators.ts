@@ -1,16 +1,11 @@
 import { BinaryOperator, UnaryOperator } from 'estree'
-import {
-  CallingNonFunctionValue,
-  ExceptionError,
-  GetInheritedPropertyError,
-  InvalidNumberOfArguments
-} from '../errors/errors'
+import { CallingNonFunctionValue, ExceptionError, InvalidNumberOfArguments } from '../errors/errors'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
-import { callExpression, locationDummyNode } from './astCreator'
-import * as create from './astCreator'
-import * as rttc from './rttc'
-import { Thunk } from '../types'
+import { Thunk, TypedValue } from '../types'
 import { makeWrapper } from '../utils/makeWrapper'
+import * as create from './astCreator'
+import { callExpression, locationDummyNode } from './astCreator'
+import * as rttc from './rttc'
 
 export function forceIt(val: Thunk | any): any {
   if (val !== undefined && val !== null && val.isMemoized !== undefined) {
@@ -116,20 +111,22 @@ export function unaryOp(operator: UnaryOperator, argument: any, line: number, co
   }
 }
 
-export function evaluateUnaryExpression(operator: UnaryOperator, value: any) {
+export function evaluateUnaryExpression(operator: UnaryOperator, operand: TypedValue) {
+  const type = operand.type
   if (operator === '!') {
-    return !value
+    return { type, value: !operand.value }
   } else if (operator === '-') {
-    return -value
+    return { type, value: -operand.value }
   } else {
-    return +value
+    // TODO: is this possible?
+    return { type, value: +operand.value }
   }
 }
 
 export function binaryOp(
   operator: BinaryOperator,
-  left: any,
-  right: any,
+  left: TypedValue,
+  right: TypedValue,
   line: number,
   column: number
 ) {
@@ -259,26 +256,26 @@ export const wrap = (f: (...args: any[]) => any, stringified: string) => {
   return wrapped
 }
 
-export const setProp = (obj: any, prop: any, value: any, line: number, column: number) => {
-  const dummy = locationDummyNode(line, column)
-  const error = rttc.checkMemberAccess(dummy, obj, prop)
-  if (error === undefined) {
-    return (obj[prop] = value)
-  } else {
-    throw error
-  }
-}
+// export const setProp = (obj: any, prop: any, value: any, line: number, column: number) => {
+//   const dummy = locationDummyNode(line, column)
+//   const error = rttc.checkMemberAccess(dummy, obj, prop)
+//   if (error === undefined) {
+//     return (obj[prop] = value)
+//   } else {
+//     throw error
+//   }
+// }
 
-export const getProp = (obj: any, prop: any, line: number, column: number) => {
-  const dummy = locationDummyNode(line, column)
-  const error = rttc.checkMemberAccess(dummy, obj, prop)
-  if (error === undefined) {
-    if (obj[prop] !== undefined && !obj.hasOwnProperty(prop)) {
-      throw new GetInheritedPropertyError(dummy, obj, prop)
-    } else {
-      return obj[prop]
-    }
-  } else {
-    throw error
-  }
-}
+// export const getProp = (obj: any, prop: any, line: number, column: number) => {
+//   const dummy = locationDummyNode(line, column)
+//   const error = rttc.checkMemberAccess(dummy, obj, prop)
+//   if (error === undefined) {
+//     if (obj[prop] !== undefined && !obj.hasOwnProperty(prop)) {
+//       throw new GetInheritedPropertyError(dummy, obj, prop)
+//     } else {
+//       return obj[prop]
+//     }
+//   } else {
+//     throw error
+//   }
+// }

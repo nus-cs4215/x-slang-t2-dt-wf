@@ -1,6 +1,6 @@
 /* tslint:disable:max-classes-per-file */
-import * as es from 'estree'
 import * as babel from '@babel/types'
+import * as es from 'estree'
 import * as constants from '../constants'
 import * as errors from '../errors/errors'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
@@ -257,7 +257,8 @@ function* evaluateBlockStatement(context: Context, node: es.BlockStatement) {
 export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     /** Simple Values */
     Literal: function*(node: es.Literal, context: Context) {
-        return node.value
+        const type = rttc.typeOf(node.value);
+        return { type, value: node.value };
     },
 
     TemplateLiteral: function*(node: es.TemplateLiteral) {
