@@ -236,8 +236,8 @@ export async function runInContext(
   if (!program) {
     return resolvedErrorPromise
   }
-  validateAndAnnotate(program as Program, context)
-  typeCheck(program, context)
+  // validateAndAnnotate(program as Program, context)
+  // typeCheck(program, context)
   if (context.errors.length > 0) {
     return resolvedErrorPromise
   }

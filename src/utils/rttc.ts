@@ -58,13 +58,13 @@ export const typeOf = (v: Value): RuntimeType => {
   // }
 }
 
-const isNumber = (v: Value) => v.type === 'number'
+const isNumber = (v: TypedValue) => v.type === 'number'
 // See section 4 of https://2ality.com/2012/12/arrays.html
 // v >>> 0 === v checks that v is a valid unsigned 32-bit int
 // tslint:disable-next-line:no-bitwise
 // const isArrayIndex = (v: Value) => isNumber(v) && v >>> 0 === v && v < 2 ** 32 - 1
-const isString = (v: Value) => v.type === 'string'
-const isBool = (v: Value) => v.type === 'boolean'
+const isString = (v: TypedValue) => v.type === 'string'
+const isBool = (v: TypedValue) => v.type === 'boolean'
 // const isObject = (v: Value) => typeOf(v) === 'object'
 // const isArray = (v: Value) => typeOf(v) === 'array'
 
@@ -125,8 +125,8 @@ export const checkUnaryExpression = (
 export const checkBinaryExpression = (
   node: es.Node,
   operator: es.BinaryOperator,
-  left: Value,
-  right: Value
+  left: TypedValue,
+  right: TypedValue
 ) => {
   switch (operator) {
     case '-':
@@ -134,9 +134,9 @@ export const checkBinaryExpression = (
     case '/':
     case '%':
       if (!isNumber(left)) {
-        return new TypeError(node, LHS, 'number', typeOf(left))
+        return new TypeError(node, LHS, 'number', left.type)
       } else if (!isNumber(right)) {
-        return new TypeError(node, RHS, 'number', typeOf(right))
+        return new TypeError(node, RHS, 'number', right.type)
       } else {
         return
       }
@@ -148,11 +148,11 @@ export const checkBinaryExpression = (
     case '!==':
     case '===':
       if (isNumber(left)) {
-        return isNumber(right) ? undefined : new TypeError(node, RHS, 'number', typeOf(right))
+        return isNumber(right) ? undefined : new TypeError(node, RHS, 'number', right.type)
       } else if (isString(left)) {
-        return isString(right) ? undefined : new TypeError(node, RHS, 'string', typeOf(right))
+        return isString(right) ? undefined : new TypeError(node, RHS, 'string', right.type)
       } else {
-        return new TypeError(node, LHS, 'string or number', typeOf(left))
+        return new TypeError(node, LHS, 'string or number', left.type)
       }
     default:
       return

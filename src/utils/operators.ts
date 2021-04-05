@@ -145,30 +145,34 @@ export function binaryOp(
   }
 }
 
-export function evaluateBinaryExpression(operator: BinaryOperator, left: any, right: any) {
+export function evaluateBinaryExpression(
+  operator: BinaryOperator,
+  left: TypedValue,
+  right: TypedValue
+): TypedValue | undefined {
   switch (operator) {
     case '+':
-      return left + right
+      return { type: left.type, value: left.value + right.value }
     case '-':
-      return left - right
+      return { type: left.type, value: left.value - right.value }
     case '*':
-      return left * right
+      return { type: left.type, value: left.value * right.value }
     case '/':
-      return left / right
+      return { type: left.type, value: left.value / right.value }
     case '%':
-      return left % right
+      return { type: left.type, value: left.value % right.value }
     case '===':
-      return left === right
+      return { type: 'boolean', value: left.value === right.value }
     case '!==':
-      return left !== right
+      return { type: 'boolean', value: left.value !== right.value }
     case '<=':
-      return left <= right
+      return { type: 'boolean', value: left.value <= right.value }
     case '<':
-      return left < right
+      return { type: 'boolean', value: left.value < right.value }
     case '>':
-      return left > right
+      return { type: 'boolean', value: left.value > right.value }
     case '>=':
-      return left >= right
+      return { type: 'boolean', value: left.value >= right.value }
     default:
       return undefined
   }
