@@ -1,5 +1,6 @@
 import * as babel from '@babel/types'
 import * as es from 'estree'
+import { isObject } from 'lodash'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
 import { ErrorSeverity, ErrorType, RuntimeType, TypedValue, Value } from '../types'
 
@@ -61,7 +62,7 @@ const isBool = (v: TypedValue) => v.type === 'boolean'
 // const isObject = (v: Value) => typeOf(v) === 'object'
 // const isArray = (v: Value) => typeOf(v) === 'array'
 
-const getCorrespondingType = (t: babel.TSBaseType) => {
+const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
   switch (t.type) {
     case 'TSAnyKeyword':
       throw new Error('Any types are not supported in x-slang')
@@ -91,16 +92,54 @@ const getCorrespondingType = (t: babel.TSBaseType) => {
       throw new Error('TS Undefined Keywords are not supported in x-slang') // TODO: handle this
     case 'TSVoidKeyword':
       throw new Error('TS Void Keywords are not supported in x-slang') // TODO: when adding functions
+    case 'TSFunctionType':
+      if (!t.typeAnnotation) {
+        throw new Error(
+          `TS type annotations are required for function return types (line ${t.loc?.start.line} column ${t.loc?.start.column})`
+        )
+      }
+      // TODO: ensure no infinite loop
+      return {
+        paramTypes: t.parameters.map(id => {
+          if (!id.typeAnnotation || !babel.isTSTypeAnnotation(id.typeAnnotation)) {
+            throw new Error(
+              `TS type annotations are required in function type parameters (line ${id.loc?.start.line} column ${id.loc?.start.column})`
+            )
+          }
+          return convertToRuntimeType(id.typeAnnotation.typeAnnotation)
+        }),
+        returnType: convertToRuntimeType(t.typeAnnotation.typeAnnotation)
+      }
+    case 'TSTypeReference':
+      throw new Error('TS Type Reference is not supported in x-slang') // TODO: handle this
     default:
+      // TSConstructorType | TSTypePredicate | TSTypeQuery | TSTypeLiteral | TSArrayType | TSTupleType | TSOptionalType | TSRestType | TSUnionType | TSIntersectionType | TSConditionalType | TSInferType | TSParenthesizedType | TSTypeOperator | TSIndexedAccessType | TSMappedType | TSExpressionWithTypeArguments | TSImportType
       throw new Error(`Unknown type in getCorrespondingType: ${t.type}`)
   }
 }
 
-const isMatchingType = (tsType: babel.TSBaseType, runtimeType: RuntimeType) => {
-  const typeToMatch = getCorrespondingType(tsType)
-  // TODO: deal with 'any' properly
-  return typeToMatch === runtimeType
-  // NOTE: this most likely will not work with array indexes
+const isMatchingType = (t1: RuntimeType, t2: RuntimeType): boolean => {
+  // TODO: deal with 'any'
+  if (!isObject(t1) || !isObject(t2)) {
+    return t1 === t2
+  }
+  return (
+    isMatchingType(t1.returnType, t2.returnType) && isMatchingTypes(t1.paramTypes, t2.paramTypes)
+  )
+}
+
+const isMatchingTypes = (t1: RuntimeType[], t2: RuntimeType[]) => {
+  if (t1.length === 0 && t2.length === 0) {
+    return true
+  } else if (t1.length !== t2.length) {
+    return false
+  }
+  for (let i = 0; i < t1.length; i++) {
+    if (!isMatchingType(t1[i], t2[i])) {
+      return false
+    }
+  }
+  return true
 }
 
 export const checkUnaryExpression = (
@@ -109,9 +148,9 @@ export const checkUnaryExpression = (
   value: TypedValue
 ) => {
   if ((operator === '+' || operator === '-') && !isNumber(value)) {
-    return new TypeError(node, '', 'number', value.type)
+    return new TypeError(node, '', 'number', rttToString(value.type))
   } else if (operator === '!' && !isBool(value)) {
-    return new TypeError(node, '', 'boolean', value.type)
+    return new TypeError(node, '', 'boolean', rttToString(value.type))
   } else {
     return undefined
   }
@@ -129,9 +168,9 @@ export const checkBinaryExpression = (
     case '/':
     case '%':
       if (!isNumber(left)) {
-        return new TypeError(node, LHS, 'number', left.type)
+        return new TypeError(node, LHS, 'number', rttToString(left.type))
       } else if (!isNumber(right)) {
-        return new TypeError(node, RHS, 'number', right.type)
+        return new TypeError(node, RHS, 'number', rttToString(right.type))
       } else {
         return
       }
@@ -143,11 +182,15 @@ export const checkBinaryExpression = (
     case '!==':
     case '===':
       if (isNumber(left)) {
-        return isNumber(right) ? undefined : new TypeError(node, RHS, 'number', right.type)
+        return isNumber(right)
+          ? undefined
+          : new TypeError(node, RHS, 'number', rttToString(right.type))
       } else if (isString(left)) {
-        return isString(right) ? undefined : new TypeError(node, RHS, 'string', right.type)
+        return isString(right)
+          ? undefined
+          : new TypeError(node, RHS, 'string', rttToString(right.type))
       } else {
-        return new TypeError(node, LHS, 'string or number', left.type)
+        return new TypeError(node, LHS, 'string or number', rttToString(left.type))
       }
     default:
       return
@@ -155,7 +198,9 @@ export const checkBinaryExpression = (
 }
 
 export const checkIfStatement = (node: es.Node, test: TypedValue) => {
-  return isBool(test) ? undefined : new TypeError(node, ' as condition', 'boolean', test.type)
+  return isBool(test)
+    ? undefined
+    : new TypeError(node, ' as condition', 'boolean', rttToString(test.type))
 }
 
 // export const checkMemberAccess = (node: es.Node, obj: Value, prop: Value) => {
@@ -181,16 +226,19 @@ export const checkVariableDeclaration = (
     return new TypeError(node, ` name for variable ${id.name}`, 'type annotation', 'none')
   } else if (id.typeAnnotation.type !== 'TSTypeAnnotation') {
     return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //parser error
-  } else if (!babel.isTSBaseType(id.typeAnnotation.typeAnnotation)) {
-    return new TypeError(node, '', 'TypeScript base type', id.typeAnnotation.typeAnnotation.type) //TODO: check whether this can happen
-  } else if (!isMatchingType(id.typeAnnotation.typeAnnotation, init.type)) {
+  } else if (!isMatchingType(convertToRuntimeType(id.typeAnnotation.typeAnnotation), init.type)) {
     return new TypeError(
       node,
       ` as type of ${id.name}`,
-      getCorrespondingType(id.typeAnnotation.typeAnnotation),
-      init.type
+      rttToString(convertToRuntimeType(id.typeAnnotation.typeAnnotation)),
+      rttToString(init.type)
     )
   } else {
     return undefined
   }
 }
+
+// Utility functions
+
+// TODO: better toString() for functions
+const rttToString = (t: RuntimeType) => (isObject(t) ? 'function' : t)
