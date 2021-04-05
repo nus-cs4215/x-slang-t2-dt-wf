@@ -1,7 +1,14 @@
-import * as es from 'estree'
 import * as babel from '@babel/types'
+import * as es from 'estree'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
-import { ErrorSeverity, ErrorType, RuntimeType, Type, TypeAnnotatedNode, Value } from '../types'
+import {
+  ErrorSeverity,
+  ErrorType,
+  RuntimeType,
+  TypeAnnotatedNode,
+  TypedValue,
+  Value
+} from '../types'
 
 const LHS = ' on left hand side of operation'
 const RHS = ' on right hand side of operation'
@@ -30,25 +37,36 @@ export class TypeError extends RuntimeSourceError {
 }
 
 // We need to define our own typeof in order for null/array to display properly in error messages
-const typeOf = (v: Value) => {
-  if (v === null) {
-    return 'null'
-  } else if (Array.isArray(v)) {
-    return 'array'
+export const typeOf = (v: Value): RuntimeType => {
+  const typeOfV = typeof v
+  if (
+    typeOfV === 'string' ||
+    typeOfV === 'number' ||
+    typeOfV === 'boolean' ||
+    typeOfV === 'undefined'
+  ) {
+    return typeOfV
   } else {
-    return typeof v
+    throw Error(`unknown type in rttc.typeOf(${v}): ${typeOfV}`)
   }
+  // if (v === null) {
+  //   return 'null'
+  // } else if (Array.isArray(v)) {
+  //   return 'array'
+  // } else {
+  //   return typeof v
+  // }
 }
 
-const isNumber = (v: Value) => typeOf(v) === 'number'
+const isNumber = (v: TypedValue) => v.type === 'number'
 // See section 4 of https://2ality.com/2012/12/arrays.html
 // v >>> 0 === v checks that v is a valid unsigned 32-bit int
 // tslint:disable-next-line:no-bitwise
-const isArrayIndex = (v: Value) => isNumber(v) && v >>> 0 === v && v < 2 ** 32 - 1
-const isString = (v: Value) => typeOf(v) === 'string'
-const isBool = (v: Value) => typeOf(v) === 'boolean'
-const isObject = (v: Value) => typeOf(v) === 'object'
-const isArray = (v: Value) => typeOf(v) === 'array'
+// const isArrayIndex = (v: Value) => isNumber(v) && v >>> 0 === v && v < 2 ** 32 - 1
+const isString = (v: TypedValue) => v.type === 'string'
+const isBool = (v: TypedValue) => v.type === 'boolean'
+// const isObject = (v: Value) => typeOf(v) === 'object'
+// const isArray = (v: Value) => typeOf(v) === 'array'
 
 // TODO: move this to typeChecker if useful
 // const getCorrespondingType = (t: babel.TSBaseType) => {
@@ -86,15 +104,19 @@ const isArray = (v: Value) => typeOf(v) === 'array'
 //   }
 // }
 
-const isMatchingType = (inferredType: Type, rtType: RuntimeType) => {
-  return false
-}
+// const isMatchingType = (inferredType: Type, rtType: RuntimeType) => {
+//   return false
+// }
 
-export const checkUnaryExpression = (node: es.Node, operator: es.UnaryOperator, value: Value) => {
+export const checkUnaryExpression = (
+  node: es.Node,
+  operator: es.UnaryOperator,
+  value: TypedValue
+) => {
   if ((operator === '+' || operator === '-') && !isNumber(value)) {
-    return new TypeError(node, '', 'number', typeOf(value))
+    return new TypeError(node, '', 'number', value.type)
   } else if (operator === '!' && !isBool(value)) {
-    return new TypeError(node, '', 'boolean', typeOf(value))
+    return new TypeError(node, '', 'boolean', value.type)
   } else {
     return undefined
   }
@@ -103,8 +125,8 @@ export const checkUnaryExpression = (node: es.Node, operator: es.UnaryOperator, 
 export const checkBinaryExpression = (
   node: es.Node,
   operator: es.BinaryOperator,
-  left: Value,
-  right: Value
+  left: TypedValue,
+  right: TypedValue
 ) => {
   switch (operator) {
     case '-':
@@ -112,9 +134,9 @@ export const checkBinaryExpression = (
     case '/':
     case '%':
       if (!isNumber(left)) {
-        return new TypeError(node, LHS, 'number', typeOf(left))
+        return new TypeError(node, LHS, 'number', left.type)
       } else if (!isNumber(right)) {
-        return new TypeError(node, RHS, 'number', typeOf(right))
+        return new TypeError(node, RHS, 'number', right.type)
       } else {
         return
       }
@@ -126,34 +148,34 @@ export const checkBinaryExpression = (
     case '!==':
     case '===':
       if (isNumber(left)) {
-        return isNumber(right) ? undefined : new TypeError(node, RHS, 'number', typeOf(right))
+        return isNumber(right) ? undefined : new TypeError(node, RHS, 'number', right.type)
       } else if (isString(left)) {
-        return isString(right) ? undefined : new TypeError(node, RHS, 'string', typeOf(right))
+        return isString(right) ? undefined : new TypeError(node, RHS, 'string', right.type)
       } else {
-        return new TypeError(node, LHS, 'string or number', typeOf(left))
+        return new TypeError(node, LHS, 'string or number', left.type)
       }
     default:
       return
   }
 }
 
-export const checkIfStatement = (node: es.Node, test: Value) => {
-  return isBool(test) ? undefined : new TypeError(node, ' as condition', 'boolean', typeOf(test))
+export const checkIfStatement = (node: es.Node, test: TypedValue) => {
+  return isBool(test) ? undefined : new TypeError(node, ' as condition', 'boolean', test.type)
 }
 
-export const checkMemberAccess = (node: es.Node, obj: Value, prop: Value) => {
-  if (isObject(obj)) {
-    return isString(prop) ? undefined : new TypeError(node, ' as prop', 'string', typeOf(prop))
-  } else if (isArray(obj)) {
-    return isArrayIndex(prop)
-      ? undefined
-      : isNumber(prop)
-      ? new TypeError(node, ' as prop', 'array index', 'other number')
-      : new TypeError(node, ' as prop', 'array index', typeOf(prop))
-  } else {
-    return new TypeError(node, '', 'object or array', typeOf(obj))
-  }
-}
+// export const checkMemberAccess = (node: es.Node, obj: Value, prop: Value) => {
+//   if (isObject(obj)) {
+//     return isString(prop) ? undefined : new TypeError(node, ' as prop', 'string', typeOf(prop))
+//   } else if (isArray(obj)) {
+//     return isArrayIndex(prop)
+//       ? undefined
+//       : isNumber(prop)
+//       ? new TypeError(node, ' as prop', 'array index', 'other number')
+//       : new TypeError(node, ' as prop', 'array index', typeOf(prop))
+//   } else {
+//     return new TypeError(node, '', 'object or array', typeOf(obj))
+//   }
+// }
 
 export const checkVariableDeclaration = (
   node: TypeAnnotatedNode<babel.VariableDeclaration>,
