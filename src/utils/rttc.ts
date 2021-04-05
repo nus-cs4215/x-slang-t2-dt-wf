@@ -159,8 +159,8 @@ export const checkBinaryExpression = (
   }
 }
 
-export const checkIfStatement = (node: es.Node, test: Value) => {
-  return isBool(test) ? undefined : new TypeError(node, ' as condition', 'boolean', typeOf(test))
+export const checkIfStatement = (node: es.Node, test: TypedValue) => {
+  return isBool(test) ? undefined : new TypeError(node, ' as condition', 'boolean', test.type)
 }
 
 // export const checkMemberAccess = (node: es.Node, obj: Value, prop: Value) => {

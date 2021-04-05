@@ -440,7 +440,7 @@ function* reduceIf(
     return handleRuntimeError(context, error)
   }
 
-  return test ? node.consequent : node.alternate
+  return test.value ? node.consequent : node.alternate
 }
 
 // tslint:enable:object-literal-shorthand
