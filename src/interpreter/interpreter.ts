@@ -140,7 +140,7 @@ function defineVariable(
   context: Context,
   id: babel.Identifier,
   value: TypedValue,
-  node: babel.VariableDeclaration
+  node: babel.VariableDeclaration | babel.FunctionDeclaration
 ) {
   const name = id.name
   const environment = currentEnvironment(context)
@@ -377,7 +377,17 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionDeclaration: function*(node: es.FunctionDeclaration, context: Context) {
-        throw new Error("Function declarations not supported in x-slang");
+      const id = node.id as unknown as babel.Identifier //we are not using es.identifier here
+      const closure = new Closure(node, currentEnvironment(context), context)
+      
+      const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionDeclaration)
+      if (error) {
+        handleRuntimeError(context, error)
+      }
+
+      const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionDeclaration)
+      defineVariable(context, id, {type: functionType, value: closure}, node as unknown as babel.FunctionDeclaration)
+      return undefined
     },
 
     IfStatement: function*(node: es.IfStatement | es.ConditionalExpression, context: Context) {

@@ -152,10 +152,7 @@ export type RuntimeNumber = 'number'
 export type RuntimeBoolean = 'boolean'
 export type RuntimeString = 'string'
 export type RuntimeUndefined = 'undefined'
-export type RuntimeFunctionType = {
-  paramTypes: RuntimeType[]
-  returnType: RuntimeType
-}
+export type RuntimeFunctionType = { paramTypes: RuntimeType[]; returnType: RuntimeType }
 
 // tslint:disable:no-any
 export interface Frame {

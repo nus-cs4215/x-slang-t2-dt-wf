@@ -2,7 +2,14 @@ import * as babel from '@babel/types'
 import * as es from 'estree'
 import { isObject } from 'lodash'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
-import { ErrorSeverity, ErrorType, RuntimeType, TypedValue, Value } from '../types'
+import {
+  ErrorSeverity,
+  ErrorType,
+  RuntimeFunctionType,
+  RuntimeType,
+  TypedValue,
+  Value
+} from '../types'
 
 const LHS = ' on left hand side of operation'
 const RHS = ' on right hand side of operation'
@@ -62,6 +69,17 @@ const isBool = (v: TypedValue) => v.type === 'boolean'
 // const isObject = (v: Value) => typeOf(v) === 'object'
 // const isArray = (v: Value) => typeOf(v) === 'array'
 
+export const typeOfFunction = (node: babel.FunctionDeclaration): RuntimeFunctionType => {
+  const returnType = convertToRuntimeType(
+    (node.returnType as babel.TSTypeAnnotation).typeAnnotation
+  )
+  const paramTypes: RuntimeType[] = node.params.map(id => {
+    const type = (id as babel.Identifier).typeAnnotation as babel.TSTypeAnnotation
+    return convertToRuntimeType(type.typeAnnotation)
+  })
+  return { paramTypes, returnType }
+}
+
 const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
   switch (t.type) {
     case 'TSAnyKeyword':
@@ -114,7 +132,7 @@ const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
       throw new Error('TS Type Reference is not supported in x-slang') // TODO: handle this
     default:
       // TSConstructorType | TSTypePredicate | TSTypeQuery | TSTypeLiteral | TSArrayType | TSTupleType | TSOptionalType | TSRestType | TSUnionType | TSIntersectionType | TSConditionalType | TSInferType | TSParenthesizedType | TSTypeOperator | TSIndexedAccessType | TSMappedType | TSExpressionWithTypeArguments | TSImportType
-      throw new Error(`Unknown type in getCorrespondingType: ${t.type}`)
+      throw new Error(`Unknown type in convertToRuntimeType: ${t.type}`)
   }
 }
 
@@ -223,9 +241,9 @@ export const checkVariableDeclaration = (
   init: TypedValue
 ) => {
   if (!id.typeAnnotation) {
-    return new TypeError(node, ` name for variable ${id.name}`, 'type annotation', 'none')
+    return new TypeError(node, ` for variable ${id.name}`, 'type annotation', 'none')
   } else if (id.typeAnnotation.type !== 'TSTypeAnnotation') {
-    return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //parser error
+    return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //invalid program
   } else if (!isMatchingType(convertToRuntimeType(id.typeAnnotation.typeAnnotation), init.type)) {
     return new TypeError(
       node,
@@ -236,6 +254,23 @@ export const checkVariableDeclaration = (
   } else {
     return undefined
   }
+}
+
+export const checkFunctionDeclaration = (node: babel.FunctionDeclaration) => {
+  for (const id of node.params) {
+    if (!(id as babel.Identifier).typeAnnotation) {
+      return new TypeError(
+        node,
+        ` for parameter ${(id as babel.Identifier).name} in function ${node.id!.name}`,
+        'type annotation',
+        'none'
+      )
+    }
+  }
+  if (!node.returnType) {
+    return new TypeError(node, ` for function ${node.id!.name}`, 'return type annotation', 'none')
+  }
+  return undefined
 }
 
 // Utility functions
