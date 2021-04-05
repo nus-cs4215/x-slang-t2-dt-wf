@@ -107,7 +107,7 @@ const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
     case 'TSThisType':
       throw new Error('TS This Types are not supported in x-slang')
     case 'TSUndefinedKeyword':
-      throw new Error('TS Undefined Keywords are not supported in x-slang') // TODO: handle this
+      return 'undefined'
     case 'TSVoidKeyword':
       throw new Error('TS Void Keywords are not supported in x-slang') // TODO: when adding functions
     case 'TSFunctionType':
@@ -269,6 +269,49 @@ export const checkFunctionDeclaration = (node: babel.FunctionDeclaration) => {
   }
   if (!node.returnType) {
     return new TypeError(node, ` for function ${node.id!.name}`, 'return type annotation', 'none')
+  }
+  return undefined
+}
+
+export const checkCallee = (node: babel.CallExpression, callee: TypedValue) => {
+  if (!isObject(callee.type)) {
+    return new TypeError(node, ` as callee`, 'function', callee.type)
+  }
+  return undefined
+}
+
+export const checkTypeOfArguments = (
+  node: babel.CallExpression,
+  functionType: RuntimeFunctionType,
+  args: TypedValue[]
+) => {
+  const paramTypes = functionType.paramTypes
+  const argTypes = args.map(typedValue => typedValue.type)
+  for (let i = 0; i < paramTypes.length; i++) {
+    if (!isMatchingType(paramTypes[i], argTypes[i])) {
+      return new TypeError(
+        node,
+        ` as argument ${i}`,
+        rttToString(paramTypes[i]),
+        rttToString(argTypes[i])
+      )
+    }
+  }
+  return undefined
+}
+
+export const checkTypeOfReturnValue = (
+  node: babel.CallExpression,
+  functionType: RuntimeFunctionType,
+  result: TypedValue
+) => {
+  if (!isMatchingType(functionType.returnType, result.type)) {
+    return new TypeError(
+      node,
+      ' as return value',
+      rttToString(functionType.returnType),
+      rttToString(result.type)
+    )
   }
   return undefined
 }

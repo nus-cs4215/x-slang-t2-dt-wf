@@ -147,6 +147,7 @@ export type RuntimeType =
   | RuntimeString
   | RuntimeUndefined
   | RuntimeFunctionType
+  | 'unknown' // to debug and remove before submission
 
 export type RuntimeNumber = 'number'
 export type RuntimeBoolean = 'boolean'
@@ -167,6 +168,10 @@ export type Value = any
 export interface TypedValue {
   type: RuntimeType
   value: Value
+}
+export interface RuntimeTyped<T> {
+  type: RuntimeType
+  value: T
 }
 // tslint:enable:no-any
 

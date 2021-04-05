@@ -12,9 +12,11 @@ import {
   isIdentifier,
   TypeAnnotatedNode,
   Value,
-  TypedValue
+  TypedValue,
+  RuntimeTyped,
+  RuntimeFunctionType
 } from '../types'
-import { primitive } from '../utils/astCreator'
+import { primitive, conditionalExpression, literal } from '../utils/astCreator'
 import { evaluateBinaryExpression, evaluateUnaryExpression } from '../utils/operators'
 import * as rttc from '../utils/rttc'
 import Closure from './closure'
@@ -24,7 +26,7 @@ class BreakValue {}
 class ContinueValue {}
 
 class ReturnValue {
-  constructor(public value: Value) {}
+  constructor(public value: TypedValue) {}
 }
 
 class TailCallReturnValue {
@@ -214,6 +216,14 @@ const checkNumberOfArguments = (
   return undefined
 }
 
+function* getArgs(context: Context, call: es.CallExpression) {
+  const args = []
+  for (const arg of call.arguments) {
+    args.push(yield* actualValue(arg, context))
+  }
+  return args
+}
+
 export type Evaluator<T extends es.Node> = (node: T, context: Context) => IterableIterator<Value>
 
 function* evaluateBlockStatement(context: Context, node: es.BlockStatement) {
@@ -283,7 +293,15 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     CallExpression: function*(node: es.CallExpression, context: Context) {
-        throw new Error("Call expressions not supported in x-slang");
+      const callee = yield* actualValue(node.callee, context)
+      const error = rttc.checkCallee(node as unknown as babel.CallExpression, callee)
+      if (error) {
+        return handleRuntimeError(context, error)
+      }
+
+      const args = yield* getArgs(context, node)
+      const result = yield* apply(context, callee, args, node)
+      return result
     },
 
     NewExpression: function*(node: es.NewExpression, context: Context) {
@@ -399,7 +417,27 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     ReturnStatement: function*(node: es.ReturnStatement, context: Context) {
-        throw new Error("Return statements not supported in x-slang");
+      let returnExpression = node.argument!
+
+      // If we have a conditional expression, reduce it until we get something else
+      while (
+        returnExpression.type === 'LogicalExpression' ||
+        returnExpression.type === 'ConditionalExpression'
+      ) {
+        if (returnExpression.type === 'LogicalExpression') {
+          returnExpression = transformLogicalExpression(returnExpression)
+        }
+        returnExpression = yield* reduceIf(returnExpression, context)
+      }
+  
+      // If we are now left with a CallExpression, then we use TCO
+      if (returnExpression.type === 'CallExpression') {
+        const callee = yield* actualValue(returnExpression.callee, context)
+        const args = yield* getArgs(context, returnExpression)
+        return new TailCallReturnValue(callee, args, returnExpression)
+      } else {
+        return new ReturnValue(yield* evaluate(returnExpression, context))
+      }
     },
 
     WhileStatement: function*(node: es.WhileStatement, context: Context) {
@@ -432,6 +470,14 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     }
 }
 
+function transformLogicalExpression(node: es.LogicalExpression): es.ConditionalExpression {
+  if (node.operator === '&&') {
+    return conditionalExpression(node.left, node.right, literal(false), node.loc!)
+  } else {
+    return conditionalExpression(node.left, literal(true), node.right, node.loc!)
+  }
+}
+
 function* reduceIf(
   node: es.IfStatement | es.ConditionalExpression,
   context: Context
@@ -459,8 +505,8 @@ export function* evaluate(node: TypeAnnotatedNode<es.Node>, context: Context) {
 
 export function* apply(
   context: Context,
-  fun: Closure | Value,
-  args: (Thunk | Value)[],
+  fun: RuntimeTyped<Closure> | TypedValue,
+  args: (Thunk | TypedValue)[],
   node: es.CallExpression,
   thisContext?: Value
 ) {
@@ -468,9 +514,19 @@ export function* apply(
   let total = 0
 
   while (!(result instanceof ReturnValue)) {
-    if (fun instanceof Closure) {
+    if (fun.value instanceof Closure) {
       checkNumberOfArguments(context, fun, args, node!)
-      const environment = createEnvironment(fun, args, node)
+
+      const error = rttc.checkTypeOfArguments(
+        (node! as unknown) as babel.CallExpression,
+        fun.type as RuntimeFunctionType,
+        args as TypedValue[]
+      )
+      if (error) {
+        return handleRuntimeError(context, error)
+      }
+
+      const environment = createEnvironment(fun.value, args, node)
       if (result instanceof TailCallReturnValue) {
         replaceEnvironment(context, environment)
       } else {
@@ -480,17 +536,17 @@ export function* apply(
       const bodyEnvironment = createBlockEnvironment(context, 'functionBodyEnvironment')
       bodyEnvironment.thisContext = thisContext
       pushEnvironment(context, bodyEnvironment)
-      result = yield* evaluateBlockStatement(context, fun.node.body as es.BlockStatement)
+      result = yield* evaluateBlockStatement(context, fun.value.node.body as es.BlockStatement)
       popEnvironment(context)
       if (result instanceof TailCallReturnValue) {
-        fun = result.callee
+        fun.value = result.callee
         node = result.node
         args = result.args
       } else if (!(result instanceof ReturnValue)) {
         // No Return Value, set it as undefined
-        result = new ReturnValue(undefined)
+        result = new ReturnValue({ type: 'undefined', value: undefined })
       }
-    } else if (typeof fun === 'function') {
+    } else if (typeof fun.value === 'function') {
       checkNumberOfArguments(context, fun, args, node!)
       try {
         const forcedArgs = []
@@ -499,7 +555,7 @@ export function* apply(
           forcedArgs.push(yield* forceIt(arg, context))
         }
 
-        result = fun.apply(thisContext, forcedArgs)
+        result = fun.value.apply(thisContext, forcedArgs)
         break
       } catch (e) {
         // Recover from exception
@@ -523,6 +579,14 @@ export function* apply(
   }
   // Unwraps return value and release stack environment
   if (result instanceof ReturnValue) {
+    const error = rttc.checkTypeOfReturnValue(
+      (node! as unknown) as babel.CallExpression,
+      fun.type as RuntimeFunctionType,
+      result.value
+    )
+    if (error) {
+      return handleRuntimeError(context, error)
+    }
     result = result.value
   }
   for (let i = 1; i <= total; i++) {
