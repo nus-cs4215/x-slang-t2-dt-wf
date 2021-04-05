@@ -11,7 +11,8 @@ import {
   Frame,
   isIdentifier,
   TypeAnnotatedNode,
-  Value
+  Value,
+  TypedValue
 } from '../types'
 import { primitive } from '../utils/astCreator'
 import { evaluateBinaryExpression, evaluateUnaryExpression } from '../utils/operators'
@@ -137,29 +138,20 @@ function declareFunctionsAndVariables(context: Context, node: es.BlockStatement)
 
 function defineVariable(
   context: Context,
-  id: babel.Identifier, // note that identifiers are not type annotated in typeChecker
-  value: Value,
-  node: TypeAnnotatedNode<es.VariableDeclaration>
+  id: babel.Identifier,
+  value: TypedValue,
+  node: babel.VariableDeclaration
 ) {
   const name = id.name
   const environment = currentEnvironment(context)
   if (environment.head.values[name] !== DECLARED_BUT_NOT_YET_ASSIGNED) {
     // TODO: why does js-slang use context.runtime.nodes?
-    handleRuntimeError(context, new errors.VariableRedeclaration(node, name))
+    handleRuntimeError(
+      context,
+      new errors.VariableRedeclaration((node as unknown) as es.Node, name)
+    )
   }
-
-  const inferredType = node.inferredType
-  if (!inferredType) {
-    // TODO: ensure that this doesn't happen
-    throw new Error(`No inferred type for node: ${JSON.stringify(node, null, 2)}`)
-  } else if (inferredType.kind !== 'primitive') {
-    throw new Error('Only primitive types supported for now') // HACK: temporarily disabled
-  }
-  // TODO: use JS object properties to define whether constant or not, etc.
-  environment.head.values[name] = {
-    type: inferredType.name, // FIXME: create a runtime type based on the type annotation (or inferred?)
-    value: value
-  }
+  environment.head.values[name] = value
 }
 
 function lookupVariable(context: Context, name: string, node: es.Identifier) {
@@ -170,7 +162,7 @@ function lookupVariable(context: Context, name: string, node: es.Identifier) {
       if (result === DECLARED_BUT_NOT_YET_ASSIGNED) {
         return handleRuntimeError(context, new errors.UnassignedVariable(name, node))
       }
-      return result.value // TODO: return the result type too
+      return result
     }
     if (environment.tail === null) {
       return handleRuntimeError(context, new errors.UndefinedVariable(name, node))
@@ -358,7 +350,8 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         if (error) {
             return handleRuntimeError(context, error)
         }
-        defineVariable(context, id as unknown as babel.Identifier, initValue, node);
+        // node had a property start and end but does not have innerComments, declare
+        defineVariable(context, id as unknown as babel.Identifier, initValue, node as unknown as babel.VariableDeclaration);
         return undefined;
     },
 
