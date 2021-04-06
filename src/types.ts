@@ -141,12 +141,19 @@ export interface DefinitionNode {
 
 export const DECLARED_BUT_NOT_YET_ASSIGNED = Symbol('Used to implement hoisting in interpreter')
 
-export type RuntimeType = RuntimeNumber | RuntimeBoolean | RuntimeString | RuntimeUndefined
+export type RuntimeType =
+  | RuntimeNumber
+  | RuntimeBoolean
+  | RuntimeString
+  | RuntimeUndefined
+  | RuntimeFunctionType
+  | 'unknown' // to debug and remove before submission
 
 export type RuntimeNumber = 'number'
 export type RuntimeBoolean = 'boolean'
 export type RuntimeString = 'string'
 export type RuntimeUndefined = 'undefined'
+export type RuntimeFunctionType = { paramTypes: RuntimeType[]; returnType: RuntimeType }
 
 // tslint:disable:no-any
 export interface Frame {
@@ -161,6 +168,10 @@ export type Value = any
 export interface TypedValue {
   type: RuntimeType
   value: Value
+}
+export interface RuntimeTyped<T> {
+  type: RuntimeType
+  value: T
 }
 // tslint:enable:no-any
 

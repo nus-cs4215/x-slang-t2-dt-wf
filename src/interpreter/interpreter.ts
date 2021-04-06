@@ -10,10 +10,12 @@ import {
   Environment,
   Frame,
   isIdentifier,
-  TypeAnnotatedNode,
+  RuntimeFunctionType,
+  RuntimeTyped,
+  TypedValue,
   Value
 } from '../types'
-import { primitive } from '../utils/astCreator'
+import { conditionalExpression, literal, primitive } from '../utils/astCreator'
 import { evaluateBinaryExpression, evaluateUnaryExpression } from '../utils/operators'
 import * as rttc from '../utils/rttc'
 import Closure from './closure'
@@ -23,11 +25,15 @@ class BreakValue {}
 class ContinueValue {}
 
 class ReturnValue {
-  constructor(public value: Value) {}
+  constructor(public value: TypedValue) {}
 }
 
 class TailCallReturnValue {
-  constructor(public callee: Closure, public args: Value[], public node: es.CallExpression) {}
+  constructor(
+    public callee: RuntimeTyped<Closure>,
+    public args: Value[],
+    public node: es.CallExpression
+  ) {}
 }
 
 // TODO: remove for convenience? (not lazy)
@@ -61,7 +67,7 @@ export function* actualValue(exp: es.Node, context: Context): Value {
 
 const createEnvironment = (
   closure: Closure,
-  args: Value[],
+  args: TypedValue[],
   callExpression?: es.CallExpression
 ): Environment => {
   const environment: Environment = {
@@ -102,7 +108,7 @@ const handleRuntimeError = (context: Context, error: RuntimeSourceError): never 
   throw error
 }
 
-function declareIdentifier(context: Context, name: string, node: TypeAnnotatedNode<es.Node>) {
+function declareIdentifier(context: Context, name: string, node: es.Node) {
   const environment = currentEnvironment(context)
   if (environment.head.values.hasOwnProperty(name)) {
     const descriptors = Object.getOwnPropertyDescriptors(environment.head.values)
@@ -137,29 +143,20 @@ function declareFunctionsAndVariables(context: Context, node: es.BlockStatement)
 
 function defineVariable(
   context: Context,
-  id: babel.Identifier, // note that identifiers are not type annotated in typeChecker
-  value: Value,
-  node: TypeAnnotatedNode<es.VariableDeclaration>
+  id: babel.Identifier,
+  value: TypedValue,
+  node: babel.VariableDeclaration | babel.FunctionDeclaration
 ) {
   const name = id.name
   const environment = currentEnvironment(context)
   if (environment.head.values[name] !== DECLARED_BUT_NOT_YET_ASSIGNED) {
     // TODO: why does js-slang use context.runtime.nodes?
-    handleRuntimeError(context, new errors.VariableRedeclaration(node, name))
+    handleRuntimeError(
+      context,
+      new errors.VariableRedeclaration((node as unknown) as es.Node, name)
+    )
   }
-
-  const inferredType = node.inferredType
-  if (!inferredType) {
-    // TODO: ensure that this doesn't happen
-    throw new Error(`No inferred type for node: ${JSON.stringify(node, null, 2)}`)
-  } else if (inferredType.kind !== 'primitive') {
-    throw new Error('Only primitive types supported for now') // HACK: temporarily disabled
-  }
-  // TODO: use JS object properties to define whether constant or not, etc.
-  environment.head.values[name] = {
-    type: inferredType.name, // FIXME: create a runtime type based on the type annotation (or inferred?)
-    value: value
-  }
+  environment.head.values[name] = value
 }
 
 function lookupVariable(context: Context, name: string, node: es.Identifier) {
@@ -170,7 +167,7 @@ function lookupVariable(context: Context, name: string, node: es.Identifier) {
       if (result === DECLARED_BUT_NOT_YET_ASSIGNED) {
         return handleRuntimeError(context, new errors.UnassignedVariable(name, node))
       }
-      return result.value // TODO: return the result type too
+      return result
     }
     if (environment.tail === null) {
       return handleRuntimeError(context, new errors.UndefinedVariable(name, node))
@@ -220,6 +217,14 @@ const checkNumberOfArguments = (
     }
   }
   return undefined
+}
+
+function* getArgs(context: Context, call: es.CallExpression) {
+  const args = []
+  for (const arg of call.arguments) {
+    args.push(yield* actualValue(arg, context))
+  }
+  return args
 }
 
 export type Evaluator<T extends es.Node> = (node: T, context: Context) => IterableIterator<Value>
@@ -279,11 +284,25 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionExpression: function*(node: es.FunctionExpression, context: Context) {
-        throw new Error("Function expressions not supported in x-slang");
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionExpression)
+        if (error) {
+          handleRuntimeError(context, error)
+        }
+
+        const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionExpression)
+        const closure = new Closure(node, currentEnvironment(context), context)
+        return { type: functionType, value: closure }
     },
 
     ArrowFunctionExpression: function*(node: es.ArrowFunctionExpression, context: Context) {
-        throw new Error("Arrow functions expressions not supported in x-slang");
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.ArrowFunctionExpression);
+        if (error) {
+          return handleRuntimeError(context, error);
+        }
+
+        const functionType = rttc.typeOfFunction(node as unknown as babel.ArrowFunctionExpression);
+        const closure = Closure.makeFromArrowFunction(node, currentEnvironment(context), context);
+        return { type: functionType, value: closure};
     },
 
     Identifier: function*(node: es.Identifier, context: Context) {
@@ -291,7 +310,15 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     CallExpression: function*(node: es.CallExpression, context: Context) {
-        throw new Error("Call expressions not supported in x-slang");
+      const callee = yield* actualValue(node.callee, context)
+      const error = rttc.checkCallee(node as unknown as babel.CallExpression, callee)
+      if (error) {
+        return handleRuntimeError(context, error)
+      }
+
+      const args = yield* getArgs(context, node)
+      const result = yield* apply(context, callee, args, node)
+      return result
     },
 
     NewExpression: function*(node: es.NewExpression, context: Context) {
@@ -358,7 +385,8 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         if (error) {
             return handleRuntimeError(context, error)
         }
-        defineVariable(context, id as unknown as babel.Identifier, initValue, node);
+        // node had a property start and end but does not have innerComments, declare
+        defineVariable(context, id as unknown as babel.Identifier, initValue, node as unknown as babel.VariableDeclaration);
         return undefined;
     },
 
@@ -384,7 +412,17 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionDeclaration: function*(node: es.FunctionDeclaration, context: Context) {
-        throw new Error("Function declarations not supported in x-slang");
+      const id = node.id as unknown as babel.Identifier //we are not using es.identifier here
+      const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionDeclaration)
+      if (error) {
+        handleRuntimeError(context, error)
+      }
+
+      const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionDeclaration)
+      const closure = new Closure(node, currentEnvironment(context), context)
+      
+      defineVariable(context, id, {type: functionType, value: closure}, node as unknown as babel.FunctionDeclaration)
+      return undefined
     },
 
     IfStatement: function*(node: es.IfStatement | es.ConditionalExpression, context: Context) {
@@ -396,7 +434,32 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     ReturnStatement: function*(node: es.ReturnStatement, context: Context) {
-        throw new Error("Return statements not supported in x-slang");
+      let returnExpression = node.argument!
+
+      // If we have a conditional expression, reduce it until we get something else
+      while (
+        returnExpression.type === 'LogicalExpression' ||
+        returnExpression.type === 'ConditionalExpression'
+      ) {
+        if (returnExpression.type === 'LogicalExpression') {
+          returnExpression = transformLogicalExpression(returnExpression)
+        }
+        returnExpression = yield* reduceIf(returnExpression, context)
+      }
+  
+      // If we are now left with a CallExpression, then we use TCO
+      if (returnExpression.type === 'CallExpression') {
+        const callee = yield* actualValue(returnExpression.callee, context)
+        const error = rttc.checkCallee(returnExpression as unknown as babel.CallExpression, callee)
+        if (error) {
+          return handleRuntimeError(context, error)
+        }
+  
+        const args = yield* getArgs(context, returnExpression)
+        return new TailCallReturnValue(callee, args, returnExpression)
+      } else {
+        return new ReturnValue(yield* evaluate(returnExpression, context))
+      }
     },
 
     WhileStatement: function*(node: es.WhileStatement, context: Context) {
@@ -429,6 +492,14 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     }
 }
 
+function transformLogicalExpression(node: es.LogicalExpression): es.ConditionalExpression {
+  if (node.operator === '&&') {
+    return conditionalExpression(node.left, node.right, literal(false), node.loc!)
+  } else {
+    return conditionalExpression(node.left, literal(true), node.right, node.loc!)
+  }
+}
+
 function* reduceIf(
   node: es.IfStatement | es.ConditionalExpression,
   context: Context
@@ -445,10 +516,8 @@ function* reduceIf(
 
 // tslint:enable:object-literal-shorthand
 
-// TODO: type annotated node
-export function* evaluate(node: TypeAnnotatedNode<es.Node>, context: Context) {
+export function* evaluate(node: es.Node, context: Context) {
   yield* visit(context, node)
-  // console.log(node)
   const result = yield* evaluators[node.type](node, context)
   yield* leave(context)
   return result
@@ -456,8 +525,8 @@ export function* evaluate(node: TypeAnnotatedNode<es.Node>, context: Context) {
 
 export function* apply(
   context: Context,
-  fun: Closure | Value,
-  args: (Thunk | Value)[],
+  fun: RuntimeTyped<Closure> | TypedValue,
+  args: TypedValue[],
   node: es.CallExpression,
   thisContext?: Value
 ) {
@@ -465,19 +534,30 @@ export function* apply(
   let total = 0
 
   while (!(result instanceof ReturnValue)) {
-    if (fun instanceof Closure) {
+    if (fun.value instanceof Closure) {
       checkNumberOfArguments(context, fun, args, node!)
-      const environment = createEnvironment(fun, args, node)
+
+      const error = rttc.checkTypeOfArguments(
+        (node! as unknown) as babel.CallExpression,
+        fun.type as RuntimeFunctionType,
+        args
+      )
+      if (error) {
+        return handleRuntimeError(context, error)
+      }
+
+      const environment = createEnvironment(fun.value, args, node)
       if (result instanceof TailCallReturnValue) {
         replaceEnvironment(context, environment)
       } else {
         pushEnvironment(context, environment)
         total++
       }
+
       const bodyEnvironment = createBlockEnvironment(context, 'functionBodyEnvironment')
       bodyEnvironment.thisContext = thisContext
       pushEnvironment(context, bodyEnvironment)
-      result = yield* evaluateBlockStatement(context, fun.node.body as es.BlockStatement)
+      result = yield* evaluateBlockStatement(context, fun.value.node.body as es.BlockStatement)
       popEnvironment(context)
       if (result instanceof TailCallReturnValue) {
         fun = result.callee
@@ -485,9 +565,9 @@ export function* apply(
         args = result.args
       } else if (!(result instanceof ReturnValue)) {
         // No Return Value, set it as undefined
-        result = new ReturnValue(undefined)
+        result = new ReturnValue({ type: 'undefined', value: undefined })
       }
-    } else if (typeof fun === 'function') {
+    } else if (typeof fun.value === 'function') {
       checkNumberOfArguments(context, fun, args, node!)
       try {
         const forcedArgs = []
@@ -496,7 +576,7 @@ export function* apply(
           forcedArgs.push(yield* forceIt(arg, context))
         }
 
-        result = fun.apply(thisContext, forcedArgs)
+        result = fun.value.apply(thisContext, forcedArgs)
         break
       } catch (e) {
         // Recover from exception
@@ -520,6 +600,14 @@ export function* apply(
   }
   // Unwraps return value and release stack environment
   if (result instanceof ReturnValue) {
+    const error = rttc.checkTypeOfReturnValue(
+      (node! as unknown) as babel.CallExpression,
+      fun.type as RuntimeFunctionType,
+      result.value
+    )
+    if (error) {
+      return handleRuntimeError(context, error)
+    }
     result = result.value
   }
   for (let i = 1; i <= total; i++) {
