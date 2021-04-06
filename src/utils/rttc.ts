@@ -69,7 +69,9 @@ const isBool = (v: TypedValue) => v.type === 'boolean'
 // const isObject = (v: Value) => typeOf(v) === 'object'
 // const isArray = (v: Value) => typeOf(v) === 'array'
 
-export const typeOfFunction = (node: babel.FunctionDeclaration): RuntimeFunctionType => {
+export const typeOfFunction = (
+  node: babel.FunctionDeclaration | babel.ArrowFunctionExpression
+): RuntimeFunctionType => {
   const returnType = convertToRuntimeType(
     (node.returnType as babel.TSTypeAnnotation).typeAnnotation
   )
@@ -235,6 +237,8 @@ export const checkIfStatement = (node: es.Node, test: TypedValue) => {
 //   }
 // }
 
+// Checks that a variable declaration has type annotations and that
+// its initial value's type matches the declared type
 export const checkVariableDeclaration = (
   node: babel.VariableDeclaration,
   id: babel.Identifier,
@@ -256,23 +260,31 @@ export const checkVariableDeclaration = (
   }
 }
 
-export const checkFunctionDeclaration = (node: babel.FunctionDeclaration) => {
+// Checks that a function has properly annotated parameter types and a return type
+export const checkFunctionDeclaration = (
+  node: babel.FunctionDeclaration | babel.ArrowFunctionExpression
+) => {
+  // TODO: better toString() for arrow function errors
+  const functionName = babel.isFunctionDeclaration(node)
+    ? `function ${node.id!.name}`
+    : 'arrow function'
   for (const id of node.params) {
     if (!(id as babel.Identifier).typeAnnotation) {
       return new TypeError(
         node,
-        ` for parameter ${(id as babel.Identifier).name} in function ${node.id!.name}`,
+        ` for parameter ${(id as babel.Identifier).name} in ${functionName}`,
         'type annotation',
         'none'
       )
     }
   }
   if (!node.returnType) {
-    return new TypeError(node, ` for function ${node.id!.name}`, 'return type annotation', 'none')
+    return new TypeError(node, ` for ${functionName}`, 'return type annotation', 'none')
   }
   return undefined
 }
 
+// Checks that the given value can be called, i.e. is a function
 export const checkCallee = (node: babel.CallExpression, callee: TypedValue) => {
   if (!isObject(callee.type)) {
     return new TypeError(node, ` as callee`, 'function', callee.type)

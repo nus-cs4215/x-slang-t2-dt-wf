@@ -10,13 +10,13 @@ import {
   Environment,
   Frame,
   isIdentifier,
-  TypeAnnotatedNode,
-  Value,
-  TypedValue,
+  RuntimeFunctionType,
   RuntimeTyped,
-  RuntimeFunctionType
+  TypeAnnotatedNode,
+  TypedValue,
+  Value
 } from '../types'
-import { primitive, conditionalExpression, literal } from '../utils/astCreator'
+import { conditionalExpression, literal, primitive } from '../utils/astCreator'
 import { evaluateBinaryExpression, evaluateUnaryExpression } from '../utils/operators'
 import * as rttc from '../utils/rttc'
 import Closure from './closure'
@@ -285,7 +285,14 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     ArrowFunctionExpression: function*(node: es.ArrowFunctionExpression, context: Context) {
-        throw new Error("Arrow functions expressions not supported in x-slang");
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.ArrowFunctionExpression);
+        if (error) {
+          return handleRuntimeError(context, error);
+        }
+
+        const functionType = rttc.typeOfFunction(node as unknown as babel.ArrowFunctionExpression);
+        const closure = Closure.makeFromArrowFunction(node, currentEnvironment(context), context);
+        return { type: functionType, value: closure};
     },
 
     Identifier: function*(node: es.Identifier, context: Context) {
@@ -396,14 +403,14 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
 
     FunctionDeclaration: function*(node: es.FunctionDeclaration, context: Context) {
       const id = node.id as unknown as babel.Identifier //we are not using es.identifier here
-      const closure = new Closure(node, currentEnvironment(context), context)
-      
       const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionDeclaration)
       if (error) {
         handleRuntimeError(context, error)
       }
 
       const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionDeclaration)
+      const closure = new Closure(node, currentEnvironment(context), context)
+      
       defineVariable(context, id, {type: functionType, value: closure}, node as unknown as babel.FunctionDeclaration)
       return undefined
     },
