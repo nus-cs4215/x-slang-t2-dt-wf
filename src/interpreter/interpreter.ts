@@ -12,7 +12,6 @@ import {
   isIdentifier,
   RuntimeFunctionType,
   RuntimeTyped,
-  TypeAnnotatedNode,
   TypedValue,
   Value
 } from '../types'
@@ -30,7 +29,11 @@ class ReturnValue {
 }
 
 class TailCallReturnValue {
-  constructor(public callee: Closure, public args: Value[], public node: es.CallExpression) {}
+  constructor(
+    public callee: RuntimeTyped<Closure>,
+    public args: Value[],
+    public node: es.CallExpression
+  ) {}
 }
 
 // TODO: remove for convenience? (not lazy)
@@ -64,7 +67,7 @@ export function* actualValue(exp: es.Node, context: Context): Value {
 
 const createEnvironment = (
   closure: Closure,
-  args: Value[],
+  args: TypedValue[],
   callExpression?: es.CallExpression
 ): Environment => {
   const environment: Environment = {
@@ -105,7 +108,7 @@ const handleRuntimeError = (context: Context, error: RuntimeSourceError): never 
   throw error
 }
 
-function declareIdentifier(context: Context, name: string, node: TypeAnnotatedNode<es.Node>) {
+function declareIdentifier(context: Context, name: string, node: es.Node) {
   const environment = currentEnvironment(context)
   if (environment.head.values.hasOwnProperty(name)) {
     const descriptors = Object.getOwnPropertyDescriptors(environment.head.values)
@@ -440,6 +443,11 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
       // If we are now left with a CallExpression, then we use TCO
       if (returnExpression.type === 'CallExpression') {
         const callee = yield* actualValue(returnExpression.callee, context)
+        const error = rttc.checkCallee(returnExpression as unknown as babel.CallExpression, callee)
+        if (error) {
+          return handleRuntimeError(context, error)
+        }
+  
         const args = yield* getArgs(context, returnExpression)
         return new TailCallReturnValue(callee, args, returnExpression)
       } else {
@@ -501,10 +509,8 @@ function* reduceIf(
 
 // tslint:enable:object-literal-shorthand
 
-// TODO: type annotated node
-export function* evaluate(node: TypeAnnotatedNode<es.Node>, context: Context) {
+export function* evaluate(node: es.Node, context: Context) {
   yield* visit(context, node)
-  // console.log(node)
   const result = yield* evaluators[node.type](node, context)
   yield* leave(context)
   return result
@@ -513,7 +519,7 @@ export function* evaluate(node: TypeAnnotatedNode<es.Node>, context: Context) {
 export function* apply(
   context: Context,
   fun: RuntimeTyped<Closure> | TypedValue,
-  args: (Thunk | TypedValue)[],
+  args: TypedValue[],
   node: es.CallExpression,
   thisContext?: Value
 ) {
@@ -527,7 +533,7 @@ export function* apply(
       const error = rttc.checkTypeOfArguments(
         (node! as unknown) as babel.CallExpression,
         fun.type as RuntimeFunctionType,
-        args as TypedValue[]
+        args
       )
       if (error) {
         return handleRuntimeError(context, error)
@@ -540,13 +546,14 @@ export function* apply(
         pushEnvironment(context, environment)
         total++
       }
+
       const bodyEnvironment = createBlockEnvironment(context, 'functionBodyEnvironment')
       bodyEnvironment.thisContext = thisContext
       pushEnvironment(context, bodyEnvironment)
       result = yield* evaluateBlockStatement(context, fun.value.node.body as es.BlockStatement)
       popEnvironment(context)
       if (result instanceof TailCallReturnValue) {
-        fun.value = result.callee
+        fun = result.callee
         node = result.node
         args = result.args
       } else if (!(result instanceof ReturnValue)) {
