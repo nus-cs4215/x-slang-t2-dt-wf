@@ -284,7 +284,14 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionExpression: function*(node: es.FunctionExpression, context: Context) {
-        throw new Error("Function expressions not supported in x-slang");
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionExpression)
+        if (error) {
+          handleRuntimeError(context, error)
+        }
+
+        const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionExpression)
+        const closure = new Closure(node, currentEnvironment(context), context)
+        return { type: functionType, value: closure }
     },
 
     ArrowFunctionExpression: function*(node: es.ArrowFunctionExpression, context: Context) {

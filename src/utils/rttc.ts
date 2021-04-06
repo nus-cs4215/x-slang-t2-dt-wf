@@ -70,7 +70,7 @@ const isBool = (v: TypedValue) => v.type === 'boolean'
 // const isArray = (v: Value) => typeOf(v) === 'array'
 
 export const typeOfFunction = (
-  node: babel.FunctionDeclaration | babel.ArrowFunctionExpression
+  node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression
 ): RuntimeFunctionType => {
   const returnType = convertToRuntimeType(
     (node.returnType as babel.TSTypeAnnotation).typeAnnotation
@@ -262,12 +262,14 @@ export const checkVariableDeclaration = (
 
 // Checks that a function has properly annotated parameter types and a return type
 export const checkFunctionDeclaration = (
-  node: babel.FunctionDeclaration | babel.ArrowFunctionExpression
+  node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression
 ) => {
   // TODO: better toString() for arrow function errors
   const functionName = babel.isFunctionDeclaration(node)
     ? `function ${node.id!.name}`
-    : 'arrow function'
+    : babel.isArrowFunctionExpression(node)
+    ? 'arrow function'
+    : 'function expression'
   for (const id of node.params) {
     if (!(id as babel.Identifier).typeAnnotation) {
       return new TypeError(
