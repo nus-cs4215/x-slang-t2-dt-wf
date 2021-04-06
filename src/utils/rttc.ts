@@ -330,5 +330,7 @@ export const checkTypeOfReturnValue = (
 
 // Utility functions
 
-// TODO: better toString() for functions
-const rttToString = (t: RuntimeType) => (isObject(t) ? 'function' : t)
+const rttToString = (t: RuntimeType): string =>
+  isObject(t)
+    ? `(${t.paramTypes.map(type => rttToString(type)).join(', ')}) => ${rttToString(t.returnType)}`
+    : t
