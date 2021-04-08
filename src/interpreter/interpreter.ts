@@ -565,7 +565,7 @@ export function* apply(
         args = result.args
       } else if (!(result instanceof ReturnValue)) {
         // No Return Value, set it as undefined
-        result = new ReturnValue({ type: 'undefined', value: undefined })
+        result = new ReturnValue({ type: rttc.runtimeUndefined, value: undefined })
       }
     } else if (typeof fun.value === 'function') {
       checkNumberOfArguments(context, fun, args, node!)

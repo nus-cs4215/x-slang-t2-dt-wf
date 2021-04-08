@@ -147,13 +147,20 @@ export type RuntimeType =
   | RuntimeString
   | RuntimeUndefined
   | RuntimeFunctionType
-  | 'unknown' // to debug and remove before submission
+  | { kind: 'unknown' } // to debug and remove before submission
 
-export type RuntimeNumber = 'number'
-export type RuntimeBoolean = 'boolean'
-export type RuntimeString = 'string'
-export type RuntimeUndefined = 'undefined'
-export type RuntimeFunctionType = { paramTypes: RuntimeType[]; returnType: RuntimeType }
+export type TypeName = string
+export type RuntimeNumber = { kind: 'number' }
+export type RuntimeBoolean = { kind: 'boolean' }
+export type RuntimeString = { kind: 'string' }
+export type RuntimeUndefined = { kind: 'undefined' }
+export type RuntimeFunctionType = {
+  kind: 'function'
+  typeParams: TypeName[]
+  paramTypes: (RuntimeType | RuntimeTypeReference)[]
+  returnType: RuntimeType | RuntimeTypeReference
+}
+export type RuntimeTypeReference = { kind: 'name'; value: TypeName }
 
 // tslint:disable:no-any
 export interface Frame {

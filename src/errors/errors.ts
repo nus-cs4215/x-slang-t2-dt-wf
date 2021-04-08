@@ -251,3 +251,40 @@ export class SetPropertyError extends RuntimeSourceError {
     return 'TODO'
   }
 }
+
+export class TypeError extends RuntimeSourceError {
+  public type = ErrorType.RUNTIME
+  public severity = ErrorSeverity.ERROR
+  public location: es.SourceLocation
+
+  constructor(
+    node: es.Node | babel.Node,
+    public side: string,
+    public expected: string,
+    public got: string
+  ) {
+    super(node)
+  }
+
+  public explain() {
+    return `Expected ${this.expected}${this.side}, got ${this.got}.`
+  }
+
+  public elaborate() {
+    return this.explain()
+  }
+}
+
+export class UnsupportedTypeError extends RuntimeSourceError {
+  constructor(node: es.Node, public unsupportedType: string) {
+    super(node)
+  }
+
+  public explain() {
+    return `Type ${this.unsupportedType} is not supported in Dynamic TypeScript.`
+  }
+
+  public elaborate() {
+    return this.explain()
+  }
+}

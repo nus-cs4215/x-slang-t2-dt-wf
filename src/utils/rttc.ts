@@ -1,41 +1,27 @@
 import * as babel from '@babel/types'
 import * as es from 'estree'
 import { isObject } from 'lodash'
-import { RuntimeSourceError } from '../errors/runtimeSourceError'
+import { TypeError } from '../errors/errors'
 import {
-  ErrorSeverity,
-  ErrorType,
+  RuntimeBoolean,
   RuntimeFunctionType,
+  RuntimeNumber,
+  RuntimeString,
   RuntimeType,
+  RuntimeTypeReference,
+  RuntimeUndefined,
   TypedValue,
+  TypeName,
   Value
 } from '../types'
 
 const LHS = ' on left hand side of operation'
 const RHS = ' on right hand side of operation'
 
-export class TypeError extends RuntimeSourceError {
-  public type = ErrorType.RUNTIME
-  public severity = ErrorSeverity.ERROR
-  public location: es.SourceLocation
-
-  constructor(
-    node: es.Node | babel.Node,
-    public side: string,
-    public expected: string,
-    public got: string
-  ) {
-    super(node)
-  }
-
-  public explain() {
-    return `Expected ${this.expected}${this.side}, got ${this.got}.`
-  }
-
-  public elaborate() {
-    return this.explain()
-  }
-}
+export const runtimeBoolean: RuntimeBoolean = { kind: 'boolean' }
+export const runtimeNumber: RuntimeNumber = { kind: 'number' }
+export const runtimeString: RuntimeString = { kind: 'string' }
+export const runtimeUndefined: RuntimeUndefined = { kind: 'undefined' }
 
 // We need to define our own typeof in order for null/array to display properly in error messages
 export const typeOf = (v: Value): RuntimeType => {
@@ -46,7 +32,7 @@ export const typeOf = (v: Value): RuntimeType => {
     typeOfV === 'boolean' ||
     typeOfV === 'undefined'
   ) {
-    return typeOfV
+    return { kind: typeOfV }
   } else {
     throw Error(`unknown type in rttc.typeOf(${v}): ${typeOfV}`)
   }
@@ -59,15 +45,20 @@ export const typeOf = (v: Value): RuntimeType => {
   // }
 }
 
-const isNumber = (v: TypedValue) => v.type === 'number'
+const isNumber = (v: TypedValue) => v.type.kind === 'number'
 // See section 4 of https://2ality.com/2012/12/arrays.html
 // v >>> 0 === v checks that v is a valid unsigned 32-bit int
 // tslint:disable-next-line:no-bitwise
 // const isArrayIndex = (v: Value) => isNumber(v) && v >>> 0 === v && v < 2 ** 32 - 1
-const isString = (v: TypedValue) => v.type === 'string'
-const isBool = (v: TypedValue) => v.type === 'boolean'
+const isString = (v: TypedValue) => v.type.kind === 'string'
+const isBool = (v: TypedValue) => v.type.kind === 'boolean'
 // const isObject = (v: Value) => typeOf(v) === 'object'
 // const isArray = (v: Value) => typeOf(v) === 'array'
+
+const isFunctionType = (t: RuntimeType | RuntimeTypeReference): t is RuntimeFunctionType =>
+  t.kind === 'function'
+const isTypeReference = (t: RuntimeType | RuntimeTypeReference): t is RuntimeTypeReference =>
+  t.kind === 'name'
 
 export const typeOfFunction = (
   node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression
@@ -75,21 +66,30 @@ export const typeOfFunction = (
   const returnType = convertToRuntimeType(
     (node.returnType as babel.TSTypeAnnotation).typeAnnotation
   )
-  const paramTypes: RuntimeType[] = node.params.map(id => {
+  const paramTypes = node.params.map(id => {
     const type = (id as babel.Identifier).typeAnnotation as babel.TSTypeAnnotation
     return convertToRuntimeType(type.typeAnnotation)
   })
-  return { paramTypes, returnType }
+  // TODO: check that babel.Noop won't happen
+  const typeParams =
+    node.typeParameters && babel.isTSTypeParameterDeclaration(node.typeParameters)
+      ? extractTypeNames(node.typeParameters.params)
+      : []
+  return { kind: 'function', typeParams, paramTypes, returnType }
 }
 
-const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
+const extractTypeNames = (params: babel.TSTypeParameter[]) => {
+  return params.map(p => p.name)
+}
+
+const convertToRuntimeType = (t: babel.TSType): RuntimeType | RuntimeTypeReference => {
   switch (t.type) {
     case 'TSAnyKeyword':
       throw new Error('Any types are not supported in x-slang')
     case 'TSBigIntKeyword':
       throw new Error('BigInts are not supported in x-slang')
     case 'TSBooleanKeyword':
-      return 'boolean'
+      return runtimeBoolean
     case 'TSIntrinsicKeyword':
       throw new Error('TS Intrinsic Keywords are not supported in x-slang')
     case 'TSLiteralType':
@@ -99,17 +99,17 @@ const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
     case 'TSNullKeyword':
       throw new Error('TS Null keywords are not supported in x-slang')
     case 'TSNumberKeyword':
-      return 'number'
+      return runtimeNumber
     case 'TSObjectKeyword':
       throw new Error('TS Object Keywords are not supported in x-slang')
     case 'TSStringKeyword':
-      return 'string'
+      return runtimeString
     case 'TSSymbolKeyword':
       throw new Error('TS Symbol Keywords are not supported in x-slang')
     case 'TSThisType':
       throw new Error('TS This Types are not supported in x-slang')
     case 'TSUndefinedKeyword':
-      return 'undefined'
+      return runtimeUndefined
     case 'TSVoidKeyword':
       throw new Error('TS Void Keywords are not supported in x-slang') // TODO: when adding functions
     case 'TSFunctionType':
@@ -119,7 +119,10 @@ const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
         )
       }
       // TODO: ensure no infinite loop
+
       return {
+        kind: 'function',
+        typeParams: t.typeParameters ? extractTypeNames(t.typeParameters.params) : [],
         paramTypes: t.parameters.map(id => {
           if (!id.typeAnnotation || !babel.isTSTypeAnnotation(id.typeAnnotation)) {
             throw new Error(
@@ -131,33 +134,59 @@ const convertToRuntimeType = (t: babel.TSType): RuntimeType => {
         returnType: convertToRuntimeType(t.typeAnnotation.typeAnnotation)
       }
     case 'TSTypeReference':
-      throw new Error('TS Type Reference is not supported in x-slang') // TODO: handle this
+      if (!babel.isIdentifier(t.typeName)) {
+        throw new Error('TSQualifiedName is not supported.')
+      }
+      return { kind: 'name', value: t.typeName.name }
     default:
       // TSConstructorType | TSTypePredicate | TSTypeQuery | TSTypeLiteral | TSArrayType | TSTupleType | TSOptionalType | TSRestType | TSUnionType | TSIntersectionType | TSConditionalType | TSInferType | TSParenthesizedType | TSTypeOperator | TSIndexedAccessType | TSMappedType | TSExpressionWithTypeArguments | TSImportType
       throw new Error(`Unknown type in convertToRuntimeType: ${t.type}`)
   }
 }
 
-const isMatchingType = (t1: RuntimeType, t2: RuntimeType): boolean => {
+const isMatchingType = (t1: RuntimeType | RuntimeTypeReference, t2: RuntimeType): boolean => {
   // TODO: deal with 'any'
-  if (!isObject(t1) || !isObject(t2)) {
-    return t1 === t2
+  if (!isFunctionType(t1) || !isFunctionType(t2)) {
+    return t1.kind === t2.kind
   }
-  return (
-    isMatchingType(t1.returnType, t2.returnType) && isMatchingTypes(t1.paramTypes, t2.paramTypes)
-  )
-}
-
-const isMatchingTypes = (t1: RuntimeType[], t2: RuntimeType[]) => {
-  if (t1.length === 0 && t2.length === 0) {
-    return true
-  } else if (t1.length !== t2.length) {
+  // same number of type parameters
+  if (t1.typeParams.length !== t2.typeParams.length) {
     return false
   }
-  for (let i = 0; i < t1.length; i++) {
-    if (!isMatchingType(t1[i], t2[i])) {
+  // each of the function params reference the "same" type parameter position OR they have the same type
+  for (let i = 0; i < t1.paramTypes.length; i++) {
+    const t1Parameter = t1.paramTypes[i]
+    const t2Parameter = t2.paramTypes[i]
+    if (!isMatchingTypeBasedOnTypeParams(t1Parameter, t2Parameter, t1.typeParams, t2.typeParams)) {
+      return false
+    } else if (!isMatchingType(t1Parameter, t2Parameter as RuntimeType)) {
+      // TODO: ensure t2Parameter is not RuntimeTypeReference
       return false
     }
+  }
+  if (
+    !isMatchingTypeBasedOnTypeParams(t1.returnType, t2.returnType, t1.typeParams, t2.typeParams) ||
+    !isMatchingType(t1.returnType, t2.returnType as RuntimeType)
+  ) {
+    return false
+  }
+  return true
+}
+
+const isMatchingTypeBasedOnTypeParams = (
+  t1: RuntimeType | RuntimeTypeReference,
+  t2: RuntimeType | RuntimeTypeReference,
+  t1TypeParams: TypeName[],
+  t2TypeParams: TypeName[]
+) => {
+  if (isTypeReference(t1) && isTypeReference(t2)) {
+    return (
+      t1TypeParams.indexOf(t1.value) !== -1 &&
+      t2TypeParams.indexOf(t2.value) !== -1 &&
+      t1TypeParams.indexOf(t1.value) === t2TypeParams.indexOf(t2.value)
+    )
+  } else if (isTypeReference(t1) || isTypeReference(t2)) {
+    return false
   }
   return true
 }
@@ -332,7 +361,9 @@ export const checkTypeOfReturnValue = (
 
 // Utility functions
 
-const rttToString = (t: RuntimeType): string =>
-  isObject(t)
+const rttToString = (t: RuntimeType | RuntimeTypeReference): string =>
+  isFunctionType(t)
     ? `(${t.paramTypes.map(type => rttToString(type)).join(', ')}) => ${rttToString(t.returnType)}`
-    : t
+    : isTypeReference(t)
+    ? `type '${t.value}'`
+    : t.kind

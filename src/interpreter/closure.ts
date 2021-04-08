@@ -17,7 +17,7 @@ const closureToJS = (value: Closure, context: Context, klass: string) => {
     const gen = apply(
       context,
       // FIXME: figure out what this does
-      { type: 'unknown', value },
+      { type: { kind: 'unknown' }, value },
       args,
       callExpression(identifier(klass), args),
       this

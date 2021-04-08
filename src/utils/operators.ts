@@ -162,17 +162,17 @@ export function evaluateBinaryExpression(
     case '%':
       return { type: left.type, value: left.value % right.value }
     case '===':
-      return { type: 'boolean', value: left.value === right.value }
+      return { type: rttc.runtimeBoolean, value: left.value === right.value }
     case '!==':
-      return { type: 'boolean', value: left.value !== right.value }
+      return { type: rttc.runtimeBoolean, value: left.value !== right.value }
     case '<=':
-      return { type: 'boolean', value: left.value <= right.value }
+      return { type: rttc.runtimeBoolean, value: left.value <= right.value }
     case '<':
-      return { type: 'boolean', value: left.value < right.value }
+      return { type: rttc.runtimeBoolean, value: left.value < right.value }
     case '>':
-      return { type: 'boolean', value: left.value > right.value }
+      return { type: rttc.runtimeBoolean, value: left.value > right.value }
     case '>=':
-      return { type: 'boolean', value: left.value >= right.value }
+      return { type: rttc.runtimeBoolean, value: left.value >= right.value }
     default:
       return undefined
   }
