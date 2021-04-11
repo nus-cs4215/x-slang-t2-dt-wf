@@ -1,6 +1,7 @@
 /* tslint:disable:max-classes-per-file */
 import { generate } from 'astring'
 import * as es from 'estree'
+import * as babel from '@babel/types'
 
 import { Context, Environment, Value } from '../types'
 import {
@@ -19,7 +20,8 @@ const closureToJS = (value: Closure, context: Context, klass: string) => {
       // FIXME: figure out what this does
       { type: { kind: 'unknown' }, value },
       args,
-      callExpression(identifier(klass), args),
+      [],
+      (callExpression(identifier(klass), args) as unknown) as babel.CallExpression,
       this
     )
     let it = gen.next()
@@ -74,7 +76,7 @@ export default class Closure extends Callable {
     )
 
     // Set the closure's node to point back at the original one
-    closure.originalNode = node
+    closure.originalNode = (node as unknown) as babel.ArrowFunctionExpression
 
     return closure
   }
@@ -87,9 +89,9 @@ export default class Closure extends Callable {
   public fun: Function
 
   /** The original node that created this Closure */
-  public originalNode: es.Function
+  public originalNode: babel.Function
 
-  constructor(public node: es.Function, public environment: Environment, context: Context) {
+  constructor(public node: babel.Function, public environment: Environment, context: Context) {
     super(function (this: any, ...args: any[]) {
       return funJS.apply(this, args)
     })
@@ -99,7 +101,7 @@ export default class Closure extends Callable {
     } else {
       this.functionName =
         (this.node.params.length === 1 ? '' : '(') +
-        this.node.params.map((o: es.Identifier) => o.name).join(', ') +
+        this.node.params.map((o: babel.Identifier) => o.name).join(', ') +
         (this.node.params.length === 1 ? '' : ')') +
         ' => ...'
     }

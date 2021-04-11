@@ -7,6 +7,7 @@
 
 import { SourceLocation } from 'acorn'
 import * as es from 'estree'
+import * as babel from '@babel/types'
 
 /**
  * Defines functions that act as built-ins, but might rely on
@@ -187,7 +188,7 @@ export type AllowedDeclarations = 'const' | 'let'
 export interface Environment {
   name: string
   tail: Environment | null
-  callExpression?: es.CallExpression
+  callExpression?: babel.CallExpression
   head: Frame
   thisContext?: Value
 }

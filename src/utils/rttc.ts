@@ -1,8 +1,9 @@
 import * as babel from '@babel/types'
 import * as es from 'estree'
 import { isObject } from 'lodash'
-import { TypeError } from '../errors/errors'
+import { TypeError, UndefinedTypeError } from '../errors/errors'
 import {
+  Environment,
   RuntimeBoolean,
   RuntimeFunctionType,
   RuntimeNumber,
@@ -82,7 +83,7 @@ const extractTypeNames = (params: babel.TSTypeParameter[]) => {
   return params.map(p => p.name)
 }
 
-const convertToRuntimeType = (t: babel.TSType): RuntimeType | RuntimeTypeReference => {
+export const convertToRuntimeType = (t: babel.TSType): RuntimeType | RuntimeTypeReference => {
   switch (t.type) {
     case 'TSAnyKeyword':
       throw new Error('Any types are not supported in x-slang')
@@ -278,6 +279,7 @@ export const checkVariableDeclaration = (
   } else if (id.typeAnnotation.type !== 'TSTypeAnnotation') {
     return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //invalid program
   } else if (!isMatchingType(convertToRuntimeType(id.typeAnnotation.typeAnnotation), init.type)) {
+    // TODO: deal with type references
     return new TypeError(
       node,
       ` as type of ${id.name}`,
@@ -289,15 +291,21 @@ export const checkVariableDeclaration = (
   }
 }
 
+const stringifyArrowFunctionExpression = (node: babel.ArrowFunctionExpression) =>
+  (node.params.length === 1 ? '' : '(') +
+  node.params.map((o: babel.Identifier) => o.name).join(', ') +
+  (node.params.length === 1 ? '' : ')') +
+  ' => ...'
+
 // Checks that a function has properly annotated parameter types and a return type
 export const checkFunctionDeclaration = (
   node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression
 ) => {
-  // TODO: better toString() for arrow function errors
+  // TODO: ensure that all type references are valid
   const functionName = babel.isFunctionDeclaration(node)
     ? `function ${node.id!.name}`
     : babel.isArrowFunctionExpression(node)
-    ? 'arrow function'
+    ? stringifyArrowFunctionExpression(node)
     : 'function expression'
   for (const id of node.params) {
     if (!(id as babel.Identifier).typeAnnotation) {
@@ -323,19 +331,83 @@ export const checkCallee = (node: babel.CallExpression, callee: TypedValue) => {
   return undefined
 }
 
+// TODO: decide which node to accept
+function lookupType(env: Environment, name: string, node: babel.Node) {
+  let environment: Environment = env
+  while (true) {
+    if (environment.head.types.hasOwnProperty(name)) {
+      const result = environment.head.types[name]
+      // if (result === DECLARED_BUT_NOT_YET_ASSIGNED) {
+      //   return handleRuntimeError(context, new errors.UnassignedVariable(name, node))
+      // }
+      return result
+    }
+    if (environment.tail === null) {
+      return new UndefinedTypeError(name, node)
+    }
+    environment = environment.tail
+  }
+}
+
+export const getTypeArgs = (node: babel.TSTypeParameterInstantiation | null, env: Environment) => {
+  if (!node) {
+    return []
+  }
+  const typeArgs = node.params.map(type => convertToRuntimeType(type))
+  for (let i = 0; i < typeArgs.length; i++) {
+    let typeArg = typeArgs[i]
+    // look up type reference
+    if (isTypeReference(typeArg)) {
+      const errorOrType = lookupType(env, typeArg.value, node)
+      if (errorOrType instanceof UndefinedTypeError) {
+        // TODO: better way to pass error value
+        return errorOrType // error
+      }
+      typeArg = errorOrType
+    }
+    typeArgs[i] = typeArg
+  }
+  return typeArgs as RuntimeType[]
+}
+
 export const checkTypeOfArguments = (
   node: babel.CallExpression,
   functionType: RuntimeFunctionType,
-  args: TypedValue[]
+  args: TypedValue[],
+  typeArgs: RuntimeType[],
+  env: Environment
 ) => {
+  // TODO: can this be a RT type reference?
+  const typeEnv: Record<string, RuntimeType> = {}
+  for (let i = 0; i < functionType.typeParams.length; i++) {
+    const typeParamName = functionType.typeParams[i]
+    typeEnv[typeParamName] = typeArgs[i]
+  }
   const paramTypes = functionType.paramTypes
   const argTypes = args.map(typedValue => typedValue.type)
   for (let i = 0; i < paramTypes.length; i++) {
-    if (!isMatchingType(paramTypes[i], argTypes[i])) {
+    let expectedParamType = paramTypes[i]
+    // Deal with type references
+    if (isTypeReference(expectedParamType)) {
+      const typeName = expectedParamType.value
+      if (typeEnv[typeName] !== undefined) {
+        // Check the potential new environment first
+        expectedParamType = typeEnv[typeName]
+      } else {
+        const typeInCurrentEnvOrError = lookupType(env, typeName, node)
+        if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
+          return typeInCurrentEnvOrError
+        }
+        expectedParamType = typeInCurrentEnvOrError
+      }
+    }
+    if (!isMatchingType(expectedParamType, argTypes[i])) {
       return new TypeError(
         node,
+        // TODO: name of parameter instead of index
         ` as argument ${i}`,
-        rttToString(paramTypes[i]),
+        // TODO: stack trace so the substitution is clearer
+        rttToString(expectedParamType),
         rttToString(argTypes[i])
       )
     }
@@ -346,13 +418,23 @@ export const checkTypeOfArguments = (
 export const checkTypeOfReturnValue = (
   node: babel.CallExpression,
   functionType: RuntimeFunctionType,
-  result: TypedValue
+  result: TypedValue,
+  env: Environment
 ) => {
-  if (!isMatchingType(functionType.returnType, result.type)) {
+  let expectedReturnType = functionType.returnType
+  if (isTypeReference(expectedReturnType)) {
+    const typeName = expectedReturnType.value
+    const typeInCurrentEnvOrError = lookupType(env, typeName, node)
+    if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
+      return typeInCurrentEnvOrError
+    }
+    expectedReturnType = typeInCurrentEnvOrError
+  }
+  if (!isMatchingType(expectedReturnType, result.type)) {
     return new TypeError(
       node,
       ' as return value',
-      rttToString(functionType.returnType),
+      rttToString(expectedReturnType),
       rttToString(result.type)
     )
   }
