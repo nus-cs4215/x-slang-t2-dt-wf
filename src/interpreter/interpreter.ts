@@ -324,14 +324,15 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     ArrowFunctionExpression: function*(node: es.ArrowFunctionExpression, context: Context) {
+        const babelNode = node as unknown as babel.ArrowFunctionExpression;
         const currentEnv = currentEnvironment(context)
-        const error = rttc.checkFunctionDeclaration(node as unknown as babel.ArrowFunctionExpression, currentEnv);
+        const error = rttc.checkFunctionDeclaration(babelNode, currentEnv);
         if (error) {
           return handleRuntimeError(context, error);
         }
 
-        const functionType = rttc.typeOfFunction(node as unknown as babel.ArrowFunctionExpression, currentEnv);
-        const closure = Closure.makeFromArrowFunction(node, currentEnv, context);
+        const functionType = rttc.typeOfFunction(babelNode, currentEnv);
+        const closure = Closure.makeFromArrowFunction(babelNode, currentEnv, context);
         return { type: functionType, value: closure};
     },
 
