@@ -525,34 +525,47 @@ export const getTypeArgs = (node: babel.TSTypeParameterInstantiation | null, env
 /**
  * Replaces any type references in the function parameter/return types
  * with their actual types in the current environment.
- * 
+ *
  * TODO: nested function types
  */
 const resolveFunctionType = (
   expectedType: RuntimeFunctionType,
+  node: babel.Node,
   env: Environment,
-  node: babel.Node
+  typeEnv?: Record<string, RuntimeType>
 ): RuntimeFunctionType | UndefinedTypeError => {
   const expectedTypeClone = { ...expectedType, paramTypes: [...expectedType.paramTypes] }
   const { typeParams, paramTypes, returnType } = expectedTypeClone
   for (let i = 0; i < paramTypes.length; i++) {
     const param = paramTypes[i]
-    if (isRuntimeTypeReference(param) && !typeParams.includes(param.value)) {
-      const typeInCurrentEnvOrError = lookupType(env, param.value, node)
+    if (isRuntimeTypeReference(param)) {
+      if (typeParams.includes(param.value)) {
+        // don't need to change anything
+      } else if (typeEnv && typeEnv.hasOwnProperty(param.value)) {
+        expectedTypeClone.paramTypes[i] = typeEnv[param.value]
+      } else {
+        const typeInCurrentEnvOrError = lookupType(env, param.value, node)
+        if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
+          // NOTE: should not happen, should be checked during function declaration instead
+          return typeInCurrentEnvOrError
+        }
+        expectedTypeClone.paramTypes[i] = typeInCurrentEnvOrError
+      }
+    }
+  }
+  if (isRuntimeTypeReference(returnType)) {
+    if (typeParams.includes(returnType.value)) {
+      // don't need to change anything
+    } else if (typeEnv && typeEnv.hasOwnProperty(returnType.value)) {
+      expectedTypeClone.returnType = typeEnv[returnType.value]
+    } else {
+      const typeInCurrentEnvOrError = lookupType(env, returnType.value, node)
       if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
         // NOTE: should not happen, should be checked during function declaration instead
         return typeInCurrentEnvOrError
       }
-      expectedTypeClone.paramTypes[i] = typeInCurrentEnvOrError
+      expectedTypeClone.returnType = typeInCurrentEnvOrError
     }
-  }
-  if (isRuntimeTypeReference(returnType) && !typeParams.includes(returnType.value)) {
-    const typeInCurrentEnvOrError = lookupType(env, returnType.value, node)
-    if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
-      // NOTE: should not happen, should be checked during function declaration instead
-      return typeInCurrentEnvOrError
-    }
-    expectedTypeClone.returnType = typeInCurrentEnvOrError
   }
   return expectedTypeClone
 }
@@ -589,7 +602,7 @@ export const checkTypeOfArguments = (
       }
     }
     if (isRuntimeFunctionType(expectedParamType)) {
-      const typeOrError = resolveFunctionType(expectedParamType, env, node)
+      const typeOrError = resolveFunctionType(expectedParamType, node, env, typeEnv)
       if (typeOrError instanceof UndefinedTypeError) {
         return typeOrError
       }
@@ -628,7 +641,7 @@ export const checkTypeOfReturnValue = (
     expectedReturnType = typeInCurrentEnvOrError
   }
   if (isRuntimeFunctionType(expectedReturnType)) {
-    const typeOrError = resolveFunctionType(expectedReturnType, env, node)
+    const typeOrError = resolveFunctionType(expectedReturnType, node, env)
     if (typeOrError instanceof UndefinedTypeError) {
       return typeOrError
     }
