@@ -11,6 +11,7 @@ import {
   Frame,
   isIdentifier,
   RuntimeFunctionType,
+  RuntimeType,
   RuntimeTyped,
   TypedValue,
   Value
@@ -32,7 +33,8 @@ class TailCallReturnValue {
   constructor(
     public callee: RuntimeTyped<Closure>,
     public args: Value[],
-    public node: es.CallExpression
+    public typeArgs: RuntimeType[],
+    public node: babel.CallExpression
   ) {}
 }
 
@@ -68,7 +70,8 @@ export function* actualValue(exp: es.Node, context: Context): Value {
 const createEnvironment = (
   closure: Closure,
   args: TypedValue[],
-  callExpression?: es.CallExpression
+  callExpression?: babel.CallExpression,
+  typeArgs?: RuntimeType[]
 ): Environment => {
   const environment: Environment = {
     name: closure.functionName, // TODO: Change this
@@ -78,13 +81,21 @@ const createEnvironment = (
   if (callExpression) {
     environment.callExpression = {
       ...callExpression,
-      arguments: args.map(primitive)
+      // TODO: check that it matches babel types
+      arguments: (args.map(primitive) as unknown) as babel.Expression[]
     }
   }
   closure.node.params.forEach((param, index) => {
-    const identifier = param as es.Identifier
+    const identifier = param as babel.Identifier
     environment.head.values[identifier.name] = args[index]
   })
+  if (closure.node.typeParameters && typeArgs) {
+    // NOTE: the presence of typeArgs (if typeParameters are defined) is checked before this function is called
+    const typeParams = (closure.node.typeParameters as babel.TSTypeParameterDeclaration).params
+    typeParams.forEach((param, index) => {
+      environment.head.types[param.name] = typeArgs[index]
+    })
+  }
   return environment
 }
 
@@ -199,8 +210,9 @@ const checkNumberOfArguments = (
   context: Context,
   callee: Closure | Value,
   args: Value[],
-  exp: es.CallExpression
+  exp: babel.CallExpression
 ) => {
+  // TODO: should this be checked using types or node?
   if (callee instanceof Closure) {
     if (callee.node.params.length !== args.length) {
       return handleRuntimeError(
@@ -215,6 +227,22 @@ const checkNumberOfArguments = (
         new errors.InvalidNumberOfArguments(exp, callee.length, args.length)
       )
     }
+  }
+  return undefined
+}
+
+const checkNumberOfTypeArguments = (
+  context: Context,
+  functionType: RuntimeFunctionType,
+  typeArgs: RuntimeType[],
+  exp: babel.CallExpression
+) => {
+  // TODO: should this be checking the Closure instead?
+  if (functionType.typeParams.length !== typeArgs.length) {
+    return handleRuntimeError(
+      context,
+      new errors.InvalidNumberOfTypeArguments(exp, functionType.typeParams.length, typeArgs.length)
+    )
   }
   return undefined
 }
@@ -284,24 +312,26 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionExpression: function*(node: es.FunctionExpression, context: Context) {
-        const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionExpression)
+        const currentEnv = currentEnvironment(context)
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionExpression, currentEnv)
         if (error) {
           handleRuntimeError(context, error)
         }
 
-        const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionExpression)
-        const closure = new Closure(node, currentEnvironment(context), context)
+        const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionExpression, currentEnv)
+        const closure = new Closure(node as unknown as babel.FunctionExpression, currentEnv, context)
         return { type: functionType, value: closure }
     },
 
     ArrowFunctionExpression: function*(node: es.ArrowFunctionExpression, context: Context) {
-        const error = rttc.checkFunctionDeclaration(node as unknown as babel.ArrowFunctionExpression);
+        const currentEnv = currentEnvironment(context)
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.ArrowFunctionExpression, currentEnv);
         if (error) {
           return handleRuntimeError(context, error);
         }
 
-        const functionType = rttc.typeOfFunction(node as unknown as babel.ArrowFunctionExpression);
-        const closure = Closure.makeFromArrowFunction(node, currentEnvironment(context), context);
+        const functionType = rttc.typeOfFunction(node as unknown as babel.ArrowFunctionExpression, currentEnv);
+        const closure = Closure.makeFromArrowFunction(node, currentEnv, context);
         return { type: functionType, value: closure};
     },
 
@@ -310,14 +340,20 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     CallExpression: function*(node: es.CallExpression, context: Context) {
+      const babelNode = node as  unknown as babel.CallExpression;
+
       const callee = yield* actualValue(node.callee, context)
       const error = rttc.checkCallee(node as unknown as babel.CallExpression, callee)
       if (error) {
         return handleRuntimeError(context, error)
       }
-
       const args = yield* getArgs(context, node)
-      const result = yield* apply(context, callee, args, node)
+      const typeArgsOrError = rttc.getTypeArgs(babelNode.typeParameters, currentEnvironment(context))
+      if (typeArgsOrError instanceof RuntimeSourceError) {
+        return handleRuntimeError(context, typeArgsOrError)
+      }
+
+      const result = yield* apply(context, callee, args, typeArgsOrError, babelNode)
       return result
     },
 
@@ -381,7 +417,11 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         const initValue = yield* actualValue(declaration.init, context);
         // TODO: migrate to babel types
         // TODO: add type information for each contraction step and use that for type checking
-        const error = rttc.checkVariableDeclaration(node as unknown as babel.VariableDeclaration, id as unknown as babel.Identifier, initValue) 
+        const error = rttc.checkVariableDeclaration(
+          node as unknown as babel.VariableDeclaration, 
+          id as unknown as babel.Identifier, 
+          initValue,
+          currentEnvironment(context)) 
         if (error) {
             return handleRuntimeError(context, error)
         }
@@ -412,15 +452,16 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionDeclaration: function*(node: es.FunctionDeclaration, context: Context) {
-      const id = node.id as unknown as babel.Identifier //we are not using es.identifier here
-      const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionDeclaration)
+      const currentEnv = currentEnvironment(context)
+      const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionDeclaration, currentEnv)
       if (error) {
         handleRuntimeError(context, error)
       }
 
-      const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionDeclaration)
-      const closure = new Closure(node, currentEnvironment(context), context)
+      const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionDeclaration, currentEnv)
+      const closure = new Closure(node as unknown as babel.FunctionDeclaration, currentEnv, context)
       
+      const id = node.id as unknown as babel.Identifier //we are not using es.identifier here
       defineVariable(context, id, {type: functionType, value: closure}, node as unknown as babel.FunctionDeclaration)
       return undefined
     },
@@ -456,7 +497,11 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         }
   
         const args = yield* getArgs(context, returnExpression)
-        return new TailCallReturnValue(callee, args, returnExpression)
+        const typeArgsOrError = rttc.getTypeArgs((returnExpression as unknown as babel.CallExpression).typeParameters, currentEnvironment(context))
+        if (typeArgsOrError instanceof RuntimeSourceError) {
+          return handleRuntimeError(context, typeArgsOrError)
+        }  
+        return new TailCallReturnValue(callee, args, typeArgsOrError, returnExpression as unknown as babel.CallExpression)
       } else {
         return new ReturnValue(yield* evaluate(returnExpression, context))
       }
@@ -527,7 +572,8 @@ export function* apply(
   context: Context,
   fun: RuntimeTyped<Closure> | TypedValue,
   args: TypedValue[],
-  node: es.CallExpression,
+  typeArgs: RuntimeType[],
+  node: babel.CallExpression,
   thisContext?: Value
 ) {
   let result: Value
@@ -536,17 +582,20 @@ export function* apply(
   while (!(result instanceof ReturnValue)) {
     if (fun.value instanceof Closure) {
       checkNumberOfArguments(context, fun, args, node!)
+      checkNumberOfTypeArguments(context, fun.type as RuntimeFunctionType, typeArgs, node!)
 
       const error = rttc.checkTypeOfArguments(
         (node! as unknown) as babel.CallExpression,
         fun.type as RuntimeFunctionType,
-        args
+        args,
+        typeArgs,
+        currentEnvironment(context)
       )
       if (error) {
         return handleRuntimeError(context, error)
       }
 
-      const environment = createEnvironment(fun.value, args, node)
+      const environment = createEnvironment(fun.value, args, node, typeArgs)
       if (result instanceof TailCallReturnValue) {
         replaceEnvironment(context, environment)
       } else {
@@ -557,18 +606,23 @@ export function* apply(
       const bodyEnvironment = createBlockEnvironment(context, 'functionBodyEnvironment')
       bodyEnvironment.thisContext = thisContext
       pushEnvironment(context, bodyEnvironment)
-      result = yield* evaluateBlockStatement(context, fun.value.node.body as es.BlockStatement)
+      result = yield* evaluateBlockStatement(
+        context,
+        (fun.value.node.body as unknown) as es.BlockStatement
+      )
       popEnvironment(context)
       if (result instanceof TailCallReturnValue) {
         fun = result.callee
         node = result.node
         args = result.args
+        // TODO: typeArgs
       } else if (!(result instanceof ReturnValue)) {
         // No Return Value, set it as undefined
-        result = new ReturnValue({ type: 'undefined', value: undefined })
+        result = new ReturnValue({ type: rttc.runtimeUndefined, value: undefined })
       }
     } else if (typeof fun.value === 'function') {
       checkNumberOfArguments(context, fun, args, node!)
+      // TODO: check if/when this is called
       try {
         const forcedArgs = []
 
@@ -603,7 +657,8 @@ export function* apply(
     const error = rttc.checkTypeOfReturnValue(
       (node! as unknown) as babel.CallExpression,
       fun.type as RuntimeFunctionType,
-      result.value
+      result.value,
+      currentEnvironment(context)
     )
     if (error) {
       return handleRuntimeError(context, error)

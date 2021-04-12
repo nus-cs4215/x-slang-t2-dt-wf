@@ -84,7 +84,7 @@ export class MaximumStackLimitExceeded extends RuntimeSourceError {
 }
 
 export class CallingNonFunctionValue extends RuntimeSourceError {
-  constructor(private callee: Value, private node: es.Node) {
+  constructor(private callee: Value, private node: es.Node | babel.Node) {
     super(node)
   }
 
@@ -126,6 +126,21 @@ export class UndefinedVariable extends RuntimeSourceError {
   }
 }
 
+export class UndefinedTypeError extends RuntimeSourceError {
+  constructor(public name: string, node: babel.Node) {
+    super(node)
+  }
+
+  public explain() {
+    return `Type ${this.name} not declared.`
+  }
+
+  public elaborate() {
+    // TODO: proper elaborate
+    return `Before you can use '${this.name}' as a type, you need to declare it in a type declaration or as a type parameter.`
+  }
+}
+
 export class UnassignedVariable extends RuntimeSourceError {
   constructor(public name: string, node: es.Node) {
     super(node)
@@ -143,7 +158,7 @@ export class UnassignedVariable extends RuntimeSourceError {
 export class InvalidNumberOfArguments extends RuntimeSourceError {
   private calleeStr: string
 
-  constructor(node: es.Node, private expected: number, private got: number) {
+  constructor(node: es.Node | babel.Node, private expected: number, private got: number) {
     super(node)
     this.calleeStr = generate((node as es.CallExpression).callee)
   }
@@ -157,6 +172,27 @@ export class InvalidNumberOfArguments extends RuntimeSourceError {
     const pluralS = this.expected === 1 ? '' : 's'
 
     return `Try calling function ${calleeStr} again, but with ${this.expected} argument${pluralS} instead. Remember that arguments are separated by a ',' (comma).`
+  }
+}
+
+export class InvalidNumberOfTypeArguments extends RuntimeSourceError {
+  private calleeStr: string
+
+  constructor(node: es.Node | babel.Node, private expected: number, private got: number) {
+    super(node)
+    this.calleeStr = generate((node as es.CallExpression).callee)
+  }
+
+  public explain() {
+    const pluralS = this.expected === 1 ? '' : 's'
+    return `Expected ${this.expected} type argument${pluralS}, but got ${this.got}.`
+  }
+
+  public elaborate() {
+    const calleeStr = this.calleeStr
+    const pluralS = this.expected === 1 ? '' : 's'
+
+    return `Try calling function ${calleeStr} again, but with ${this.expected} type argument${pluralS} instead. Remember that type arguments are enclosed in angle brackets '<>' and separated by a ',' (comma).`
   }
 }
 
@@ -249,5 +285,42 @@ export class SetPropertyError extends RuntimeSourceError {
 
   public elaborate() {
     return 'TODO'
+  }
+}
+
+export class TypeError extends RuntimeSourceError {
+  public type = ErrorType.RUNTIME
+  public severity = ErrorSeverity.ERROR
+  public location: es.SourceLocation
+
+  constructor(
+    node: es.Node | babel.Node,
+    public side: string,
+    public expected: string,
+    public got: string
+  ) {
+    super(node)
+  }
+
+  public explain() {
+    return `Expected ${this.expected}${this.side}, got ${this.got}.`
+  }
+
+  public elaborate() {
+    return this.explain()
+  }
+}
+
+export class MissingTypeAnnotationError extends RuntimeSourceError {
+  constructor(node: babel.Node, private expressionType: string) {
+    super(node)
+  }
+
+  public explain() {
+    return `${this.expressionType} should have a type annotation`
+  }
+
+  public elaborate() {
+    return this.explain()
   }
 }

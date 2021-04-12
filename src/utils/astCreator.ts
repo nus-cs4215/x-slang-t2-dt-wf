@@ -1,5 +1,8 @@
 import * as es from 'estree'
+import * as babel from '@babel/types'
 import { AllowedDeclarations, BlockExpression, FunctionDeclarationExpression } from '../types'
+
+// TODO: convert everything to babel types
 
 export const getVariableDecarationName = (decl: es.VariableDeclaration) =>
   (decl.declarations[0].id as es.Identifier).name
@@ -78,14 +81,15 @@ export const blockArrowFunction = (
   params: es.Identifier[],
   body: es.Statement[] | es.BlockStatement,
   loc?: es.SourceLocation | null
-): es.ArrowFunctionExpression => ({
-  type: 'ArrowFunctionExpression',
-  expression: false,
-  generator: false,
-  params,
-  body: Array.isArray(body) ? blockStatement(body) : body,
-  loc
-})
+): babel.ArrowFunctionExpression =>
+  (({
+    type: 'ArrowFunctionExpression',
+    expression: false,
+    generator: false,
+    params,
+    body: Array.isArray(body) ? blockStatement(body) : body,
+    loc
+  } as unknown) as babel.ArrowFunctionExpression)
 
 export const functionExpression = (
   params: es.Identifier[],
