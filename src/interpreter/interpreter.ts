@@ -417,7 +417,11 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         const initValue = yield* actualValue(declaration.init, context);
         // TODO: migrate to babel types
         // TODO: add type information for each contraction step and use that for type checking
-        const error = rttc.checkVariableDeclaration(node as unknown as babel.VariableDeclaration, id as unknown as babel.Identifier, initValue) 
+        const error = rttc.checkVariableDeclaration(
+          node as unknown as babel.VariableDeclaration, 
+          id as unknown as babel.Identifier, 
+          initValue,
+          currentEnvironment(context)) 
         if (error) {
             return handleRuntimeError(context, error)
         }

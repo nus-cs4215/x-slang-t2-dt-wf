@@ -247,30 +247,6 @@ export const checkIfStatement = (node: es.Node, test: TypedValue) => {
 //   }
 // }
 
-// Checks that a variable declaration has type annotations and that
-// its initial value's type matches the declared type
-export const checkVariableDeclaration = (
-  node: babel.VariableDeclaration,
-  id: babel.Identifier,
-  init: TypedValue
-) => {
-  if (!id.typeAnnotation) {
-    return new TypeError(node, ` for variable ${id.name}`, 'type annotation', 'none')
-  } else if (id.typeAnnotation.type !== 'TSTypeAnnotation') {
-    return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //invalid program
-  } else if (!isMatchingType(convertToRuntimeType(id.typeAnnotation.typeAnnotation), init.type)) {
-    // TODO: deal with type references
-    return new TypeError(
-      node,
-      ` as type of ${id.name}`,
-      rttToString(convertToRuntimeType(id.typeAnnotation.typeAnnotation)),
-      rttToString(init.type)
-    )
-  } else {
-    return undefined
-  }
-}
-
 const stringifyArrowFunctionExpression = (node: babel.ArrowFunctionExpression) =>
   (node.params.length === 1 ? '' : '(') +
   node.params.map((o: babel.Identifier) => o.name).join(', ') +
@@ -374,6 +350,42 @@ const checkFunctionTypeValid = (
   }
 
   return undefined
+}
+
+/**
+ * Checks that a variable declaration has type annotations and that
+ * its initial value's type matches the declared type
+ */
+export const checkVariableDeclaration = (
+  node: babel.VariableDeclaration,
+  id: babel.Identifier,
+  init: TypedValue,
+  env: Environment
+) => {
+  if (!id.typeAnnotation) {
+    return new TypeError(node, ` for variable ${id.name}`, 'type annotation', 'none')
+  } else if (!babel.isTSTypeAnnotation(id.typeAnnotation)) {
+    return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //invalid TypeScript program
+  }
+  const typeAnnotation = id.typeAnnotation.typeAnnotation
+  const error = checkTSTypeValid(typeAnnotation, new Set(), env)
+  if (error) {
+    return error
+  }
+  const rttOrTypeName = convertToRuntimeType(typeAnnotation)
+  const variableType = (isTypeReference(rttOrTypeName)
+    ? lookupType(env, rttOrTypeName.value, node)
+    : rttOrTypeName) as RuntimeType
+  if (!isMatchingType(variableType, init.type)) {
+    return new TypeError(
+      node,
+      ` as type of ${id.name}`,
+      rttToString(variableType),
+      rttToString(init.type)
+    )
+  } else {
+    return undefined
+  }
 }
 
 /**
