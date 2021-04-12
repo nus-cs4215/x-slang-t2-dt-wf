@@ -78,35 +78,60 @@ export const expressionStatement = (expression: es.Expression): es.ExpressionSta
 })
 
 export const blockArrowFunction = (
-  params: es.Identifier[],
-  body: es.Statement[] | es.BlockStatement,
-  loc?: es.SourceLocation | null
-): babel.ArrowFunctionExpression =>
-  (({
-    type: 'ArrowFunctionExpression',
-    expression: false,
-    generator: false,
-    params,
-    body: Array.isArray(body) ? blockStatement(body) : body,
-    loc
-  } as unknown) as babel.ArrowFunctionExpression)
+  params: babel.Identifier[],
+  body: babel.Statement[] | babel.BlockStatement,
+  loc: babel.SourceLocation | null,
+  returnType: babel.TSTypeAnnotation | null,
+  typeParameters: babel.TSTypeParameterDeclaration | null
+): babel.ArrowFunctionExpression => ({
+  type: 'ArrowFunctionExpression',
+  start: null,
+  end: null,
+  leadingComments: null,
+  trailingComments: null,
+  innerComments: null,
+  async: false,
+  expression: false,
+  generator: false,
+  params,
+  body: Array.isArray(body) ? blockStatement(body) : body,
+  loc,
+  returnType,
+  typeParameters
+})
 
 export const functionExpression = (
-  params: es.Identifier[],
-  body: es.Statement[] | es.BlockStatement,
-  loc?: es.SourceLocation | null
-): es.FunctionExpression => ({
+  params: babel.Identifier[],
+  body: babel.Statement[] | babel.BlockStatement,
+  loc: babel.SourceLocation | null,
+  returnType: babel.TSTypeAnnotation | null,
+  typeParameters: babel.TSTypeParameterDeclaration | null
+): babel.FunctionExpression => ({
   type: 'FunctionExpression',
+  start: null,
+  end: null,
+  leadingComments: null,
+  trailingComments: null,
+  innerComments: null,
   id: null,
   async: false,
   generator: false,
   params,
   body: Array.isArray(body) ? blockStatement(body) : body,
-  loc
+  loc,
+  returnType,
+  typeParameters
 })
 
-export const blockStatement = (body: es.Statement[]): es.BlockStatement => ({
+export const blockStatement = (body: babel.Statement[]): babel.BlockStatement => ({
   type: 'BlockStatement',
+  start: null,
+  end: null,
+  leadingComments: null,
+  trailingComments: null,
+  innerComments: null,
+  directives: [],
+  loc: null,
   body
 })
 
@@ -117,10 +142,15 @@ export const program = (body: es.Statement[]): es.Program => ({
 })
 
 export const returnStatement = (
-  argument: es.Expression,
-  loc?: es.SourceLocation | null
-): es.ReturnStatement => ({
+  argument: babel.Expression,
+  loc: babel.SourceLocation | null
+): babel.ReturnStatement => ({
   type: 'ReturnStatement',
+  start: null,
+  end: null,
+  leadingComments: null,
+  innerComments: null,
+  trailingComments: null,
   argument,
   loc
 })

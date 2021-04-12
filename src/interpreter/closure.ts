@@ -1,6 +1,5 @@
 /* tslint:disable:max-classes-per-file */
 import { generate } from 'astring'
-import * as es from 'estree'
 import * as babel from '@babel/types'
 
 import { Context, Environment, Value } from '../types'
@@ -59,24 +58,32 @@ class Callable extends Function {
  */
 export default class Closure extends Callable {
   public static makeFromArrowFunction(
-    node: es.ArrowFunctionExpression,
+    node: babel.ArrowFunctionExpression,
     environment: Environment,
     context: Context
   ) {
-    function isExpressionBody(body: es.BlockStatement | es.Expression): body is es.Expression {
+    function isExpressionBody(
+      body: babel.BlockStatement | babel.Expression
+    ): body is babel.Expression {
       return body.type !== 'BlockStatement'
     }
     const functionBody = isExpressionBody(node.body)
-      ? [returnStatement(node.body, node.body.loc!)]
+      ? [returnStatement(node.body, node.body.loc)]
       : node.body
     const closure = new Closure(
-      blockArrowFunction(node.params as es.Identifier[], functionBody, node.loc!),
+      blockArrowFunction(
+        node.params as babel.Identifier[],
+        functionBody,
+        node.loc,
+        node.returnType as babel.TSTypeAnnotation | null,
+        node.typeParameters as babel.TSTypeParameterDeclaration | null
+      ),
       environment,
       context
     )
 
     // Set the closure's node to point back at the original one
-    closure.originalNode = (node as unknown) as babel.ArrowFunctionExpression
+    closure.originalNode = node
 
     return closure
   }
