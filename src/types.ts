@@ -162,6 +162,7 @@ export type RuntimeFunctionType = {
   returnType: RuntimeType | RuntimeTypeReference
 }
 export type RuntimeTypeReference = { kind: 'name'; value: TypeName }
+export type RuntimeAny = { kind: 'any' }
 
 // tslint:disable:no-any
 export interface Frame {

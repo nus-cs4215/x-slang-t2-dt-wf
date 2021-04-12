@@ -38,7 +38,6 @@ class TailCallReturnValue {
   ) {}
 }
 
-// TODO: remove for convenience? (not lazy)
 class Thunk {
   public value: Value
   public isMemoized: boolean
@@ -417,7 +416,6 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
         }
         const initValue = yield* actualValue(declaration.init, context);
         // TODO: migrate to babel types
-        // TODO: add type information for each contraction step and use that for type checking
         const error = rttc.checkVariableDeclaration(
           node as unknown as babel.VariableDeclaration, 
           id as unknown as babel.Identifier, 
@@ -616,7 +614,7 @@ export function* apply(
         fun = result.callee
         node = result.node
         args = result.args
-        // TODO: typeArgs
+        typeArgs = result.typeArgs
       } else if (!(result instanceof ReturnValue)) {
         // No Return Value, set it as undefined
         result = new ReturnValue({ type: rttc.runtimeUndefined, value: undefined })
