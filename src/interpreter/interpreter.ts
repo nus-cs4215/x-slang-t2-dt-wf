@@ -614,7 +614,7 @@ export function* apply(
         fun = result.callee
         node = result.node
         args = result.args
-        // TODO: typeArgs
+        typeArgs = result.typeArgs
       } else if (!(result instanceof ReturnValue)) {
         // No Return Value, set it as undefined
         result = new ReturnValue({ type: rttc.runtimeUndefined, value: undefined })
