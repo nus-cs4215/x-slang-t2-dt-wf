@@ -312,24 +312,26 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionExpression: function*(node: es.FunctionExpression, context: Context) {
-        const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionExpression)
+        const currentEnv = currentEnvironment(context)
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionExpression, currentEnv)
         if (error) {
           handleRuntimeError(context, error)
         }
 
-        const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionExpression)
-        const closure = new Closure(node as unknown as babel.FunctionExpression, currentEnvironment(context), context)
+        const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionExpression, currentEnv)
+        const closure = new Closure(node as unknown as babel.FunctionExpression, currentEnv, context)
         return { type: functionType, value: closure }
     },
 
     ArrowFunctionExpression: function*(node: es.ArrowFunctionExpression, context: Context) {
-        const error = rttc.checkFunctionDeclaration(node as unknown as babel.ArrowFunctionExpression);
+        const currentEnv = currentEnvironment(context)
+        const error = rttc.checkFunctionDeclaration(node as unknown as babel.ArrowFunctionExpression, currentEnv);
         if (error) {
           return handleRuntimeError(context, error);
         }
 
-        const functionType = rttc.typeOfFunction(node as unknown as babel.ArrowFunctionExpression);
-        const closure = Closure.makeFromArrowFunction(node, currentEnvironment(context), context);
+        const functionType = rttc.typeOfFunction(node as unknown as babel.ArrowFunctionExpression, currentEnv);
+        const closure = Closure.makeFromArrowFunction(node, currentEnv, context);
         return { type: functionType, value: closure};
     },
 
@@ -446,15 +448,16 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     FunctionDeclaration: function*(node: es.FunctionDeclaration, context: Context) {
-      const id = node.id as unknown as babel.Identifier //we are not using es.identifier here
-      const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionDeclaration)
+      const currentEnv = currentEnvironment(context)
+      const error = rttc.checkFunctionDeclaration(node as unknown as babel.FunctionDeclaration, currentEnv)
       if (error) {
         handleRuntimeError(context, error)
       }
 
-      const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionDeclaration)
-      const closure = new Closure(node as unknown as babel.FunctionDeclaration, currentEnvironment(context), context)
+      const functionType = rttc.typeOfFunction(node as unknown as babel.FunctionDeclaration, currentEnv)
+      const closure = new Closure(node as unknown as babel.FunctionDeclaration, currentEnv, context)
       
+      const id = node.id as unknown as babel.Identifier //we are not using es.identifier here
       defineVariable(context, id, {type: functionType, value: closure}, node as unknown as babel.FunctionDeclaration)
       return undefined
     },
