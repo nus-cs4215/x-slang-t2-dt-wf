@@ -17,8 +17,8 @@ import {
   Value
 } from '../types'
 
-const LHS = ' on left hand side of operation'
-const RHS = ' on right hand side of operation'
+const LHS = ' on left hand side of operator'
+const RHS = ' on right hand side of operator'
 
 export const runtimeBoolean: RuntimeBoolean = { kind: 'boolean' }
 export const runtimeNumber: RuntimeNumber = { kind: 'number' }
@@ -230,9 +230,9 @@ export const checkBinaryExpression = (
     case '/':
     case '%':
       if (!isNumber(left)) {
-        return new TypeError(node, LHS, 'number', rttToString(left.type))
+        return new TypeError(node, `${LHS} ${operator}`, 'number', rttToString(left.type))
       } else if (!isNumber(right)) {
-        return new TypeError(node, RHS, 'number', rttToString(right.type))
+        return new TypeError(node, `${RHS} ${operator}`, 'number', rttToString(right.type))
       } else {
         return
       }
@@ -246,13 +246,13 @@ export const checkBinaryExpression = (
       if (isNumber(left)) {
         return isNumber(right)
           ? undefined
-          : new TypeError(node, RHS, 'number', rttToString(right.type))
+          : new TypeError(node, `${RHS} ${operator}`, 'number', rttToString(right.type))
       } else if (isString(left)) {
         return isString(right)
           ? undefined
-          : new TypeError(node, RHS, 'string', rttToString(right.type))
+          : new TypeError(node, `${RHS} ${operator}`, 'string', rttToString(right.type))
       } else {
-        return new TypeError(node, LHS, 'string or number', rttToString(left.type))
+        return new TypeError(node, `${LHS} ${operator}`, 'string or number', rttToString(left.type))
       }
     default:
       return
