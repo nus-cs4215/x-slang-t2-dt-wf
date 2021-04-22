@@ -254,24 +254,37 @@ export function parse(source: string, context: Context) {
         throw error
       }
     }
-    const hasErrors = context.errors.find(m => m.severity === ErrorSeverity.ERROR)
+    const hasErrors = context.errors.find(
+      (m: { severity: ErrorSeverity }) => m.severity === ErrorSeverity.ERROR
+    )
+
     if (program && !hasErrors) {
       return program
     } else {
       return undefined
     }
   } else if (context.variant === 'typescript') {
-    const file = babelParse(source, {
-      sourceType: 'module',
-      plugins: [
-        'typescript', // Parse Typescript syntax instead of Javascript syntax
-        'estree' // Conform to the ESTree AST specification
-      ]
-    })
+    try {
+      const file = babelParse(source, {
+        sourceType: 'module',
+        plugins: [
+          'typescript', // Parse Typescript syntax instead of Javascript syntax
+          'estree' // Conform to the ESTree AST specification
+        ]
+      })
+      // Downcast (by force) to an es.Program
+      program = (file.program as unknown) as es.Program
+      return program
+    } catch (error) {
+      context.babelErrors = error
+      console.log(error)
+    }
 
-    // Downcast (by force) to an es.Program
-    program = (file.program as unknown) as es.Program
-    return program
+    if (program && !context.errors) {
+      return program
+    } else {
+      return undefined
+    }
   } else {
     return undefined
   }

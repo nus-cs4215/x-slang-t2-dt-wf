@@ -59,6 +59,7 @@ export interface Comment {
 
 export type ExecutionMethod = 'native' | 'interpreter' | 'auto'
 export type Variant = 'calc' | 'typescript'
+//export type Variant = 'calc' | 'typescript'
 
 export interface SourceLanguage {
   variant: Variant
@@ -88,6 +89,8 @@ export interface Context<T = any> {
 
   /** All the errors gathered */
   errors: SourceError[]
+
+  babelErrors: any
 
   /** Runtime Sepecific state */
   runtime: {

@@ -29,6 +29,7 @@ export const createEmptyContext = <T>(
   return {
     externalSymbols,
     errors: [],
+    babelErrors: null,
     externalContext,
     moduleParams,
     runtime: createEmptyRuntime(),
