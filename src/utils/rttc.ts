@@ -434,19 +434,13 @@ export const checkFunctionDeclaration = (
   node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression,
   env: Environment
 ) => {
-  // TODO: review this code again
-  const typeParameters: Set<string> = new Set()
-  if (node.typeParameters) {
-    const params = (node.typeParameters as babel.TSTypeParameterDeclaration).params
-    for (let i = 0; i < params.length; i++) {
-      typeParameters.add(params[i].name)
-    }
-  }
   const functionName = babel.isFunctionDeclaration(node)
     ? `function ${node.id!.name}`
     : babel.isArrowFunctionExpression(node)
     ? stringifyArrowFunctionExpression(node)
     : 'function expression'
+
+  // Check presence of type annotations
   for (const id of node.params) {
     const identifier = id as babel.Identifier
     if (!identifier.typeAnnotation) {
@@ -457,14 +451,26 @@ export const checkFunctionDeclaration = (
         'none'
       )
     }
-    const typeAnnotation = (identifier.typeAnnotation as babel.TSTypeAnnotation).typeAnnotation
+  }
+  if (!node.returnType) {
+    return new TypeError(node, ` for ${functionName}`, 'return type annotation', 'none')
+  }
+
+  // Check validity of type annotations
+  const typeParameters: Set<string> = new Set()
+  if (node.typeParameters) {
+    const params = (node.typeParameters as babel.TSTypeParameterDeclaration).params
+    for (let i = 0; i < params.length; i++) {
+      typeParameters.add(params[i].name)
+    }
+  }
+  for (const id of node.params) {
+    const typeAnnotation = ((id as babel.Identifier).typeAnnotation as babel.TSTypeAnnotation)
+      .typeAnnotation
     const error = checkTSTypeValid(typeAnnotation, typeParameters, env)
     if (error) {
       return error
     }
-  }
-  if (!node.returnType) {
-    return new TypeError(node, ` for ${functionName}`, 'return type annotation', 'none')
   }
   const typeAnnotation = (node.returnType as babel.TSTypeAnnotation).typeAnnotation
   const error = checkTSTypeValid(typeAnnotation, typeParameters, env)
@@ -630,7 +636,6 @@ export const checkTypeOfArguments = (
   for (let i = 0; i < paramTypes.length; i++) {
     if (!isMatchingType(expectedParamTypes[i], argTypes[i])) {
       // if (!isRuntimeAny(expectedParamType) && !isMatchingType(expectedParamType, argTypes[i])) {
-      // TODO: follow TS error message
       return new TypeError(
         node,
         // TODO: name of parameter instead of index
