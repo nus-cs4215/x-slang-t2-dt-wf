@@ -1,5 +1,6 @@
 import * as babel from '@babel/types'
 import * as es from 'estree'
+import { cloneDeep } from 'lodash'
 import { MissingTypeAnnotationError, TypeError, UndefinedTypeError } from '../errors/errors'
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
 import {
@@ -19,6 +20,12 @@ import {
 
 const LHS = ' on left hand side of operator'
 const RHS = ' on right hand side of operator'
+
+/**
+ * A placeholder value to indicate that the type reference should not be replaced by an actual type
+ * (e.g. when resolving nested function types).
+ */
+const REFERENCE_TO_TYPE_PARAMETER = Symbol('function type parameter')
 
 export const runtimeBoolean: RuntimeBoolean = { kind: 'boolean' }
 export const runtimeNumber: RuntimeNumber = { kind: 'number' }
@@ -406,14 +413,12 @@ export const checkVariableDeclaration = (
       return error
     }
     const rttOrTypeName = convertToRuntimeType(typeAnnotation)
-    const variableType = (isRuntimeTypeReference(rttOrTypeName)
-      ? lookupType(env, rttOrTypeName.value, node)
-      : rttOrTypeName) as RuntimeType // undefined type references would have been caught by `checkTSTypeValid`
-    if (!isMatchingType(variableType, init.type)) {
+    const expectedVariableType = resolveToActualType(rttOrTypeName, {}, env, node) as RuntimeType // undefined type references would have been caught by `checkTSTypeValid`
+    if (!isMatchingType(expectedVariableType, init.type)) {
       return new TypeError(
         node,
         ` as type of ${id.name}`,
-        rttToString(variableType),
+        rttToString(expectedVariableType),
         rttToString(init.type)
       )
     }
@@ -429,6 +434,7 @@ export const checkFunctionDeclaration = (
   node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression,
   env: Environment
 ) => {
+  // TODO: review this code again
   const typeParameters: Set<string> = new Set()
   if (node.typeParameters) {
     const params = (node.typeParameters as babel.TSTypeParameterDeclaration).params
@@ -479,21 +485,23 @@ export const typeOfFunction = (
   env: Environment
 ): RuntimeFunctionType => {
   // TODO: check that babel.Noop won't happen
+
+  // construct temporary type env
   const typeParams =
     node.typeParameters && babel.isTSTypeParameterDeclaration(node.typeParameters)
       ? extractTypeNames(node.typeParameters.params)
       : []
+  const typeEnv = {}
+  typeParams.forEach(paramName => (typeEnv[paramName] = REFERENCE_TO_TYPE_PARAMETER))
+
+  // resolve param and return types
   const paramTypes = node.params.map(id => {
     const type = (id as babel.Identifier).typeAnnotation as babel.TSTypeAnnotation
     const rtt = convertToRuntimeType(type.typeAnnotation)
-    return (isRuntimeTypeReference(rtt) && !typeParams.includes(rtt.value)
-      ? lookupType(env, rtt.value, node)
-      : rtt) as RuntimeType
+    return resolveToActualType(rtt, typeEnv, env, node) as RuntimeType // if error, should have been thrown in `checkFunctionDeclaration`
   })
   const returnRTT = convertToRuntimeType((node.returnType as babel.TSTypeAnnotation).typeAnnotation)
-  const returnType = (isRuntimeTypeReference(returnRTT) && !typeParams.includes(returnRTT.value)
-    ? lookupType(env, returnRTT.value, node)
-    : returnRTT) as RuntimeType // if error, should have been thrown in `checkFunctionDeclaration`
+  const returnType = resolveToActualType(returnRTT, typeEnv, env, node) as RuntimeType // if error, should have been thrown in `checkFunctionDeclaration`
   return { kind: 'function', typeParams, paramTypes, returnType }
 }
 
@@ -523,51 +531,73 @@ export const getTypeArgs = (node: babel.TSTypeParameterInstantiation | null, env
 }
 
 /**
- * Replaces any type references in the function parameter/return types
- * with their actual types in the current environment.
+ * Replaces all type references in the given type based on
+ * the given (temporary) type environment and the actual (type) environment,
+ * and returns the resolved type.
  *
- * TODO: nested function types
+ * For example, for `<S>(x: S): T`, the type reference `T`
+ * should be replaced by the value of `T` in `typeEnv` if such a name binding exists.
+ * Otherwise, we look up the value of `T` in `env` (TODO: an error is thrown if this does not exist).
+ * If `T` = `number`, the runtime type `<S>(x: S): number` should be returned.
+ *
+ * A type reference may be returned for intermediate recursive calls.
+ * TODO: make a separate function that's not allowed to return RTTypeReference
+ *
+ * @param node is only needed to throw errors if type lookup fails.
  */
-const resolveFunctionType = (
-  expectedType: RuntimeFunctionType,
-  node: babel.Node,
+const resolveToActualType = (
+  type: RuntimeType | RuntimeTypeReference,
+  typeEnv: Record<string, RuntimeType | typeof REFERENCE_TO_TYPE_PARAMETER>,
   env: Environment,
-  typeEnv?: Record<string, RuntimeType>
-): RuntimeFunctionType | UndefinedTypeError => {
-  const expectedTypeClone = { ...expectedType, paramTypes: [...expectedType.paramTypes] }
-  const { typeParams, paramTypes, returnType } = expectedTypeClone
-  for (let i = 0; i < paramTypes.length; i++) {
-    const param = paramTypes[i]
-    if (isRuntimeTypeReference(param)) {
-      if (typeParams.includes(param.value)) {
-        // don't need to change anything
-      } else if (typeEnv && typeEnv.hasOwnProperty(param.value)) {
-        expectedTypeClone.paramTypes[i] = typeEnv[param.value]
-      } else {
-        const typeInCurrentEnvOrError = lookupType(env, param.value, node)
-        if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
-          // NOTE: should not happen, should be checked during function declaration instead
-          return typeInCurrentEnvOrError
-        }
-        expectedTypeClone.paramTypes[i] = typeInCurrentEnvOrError
+  node: babel.Node
+): RuntimeType | RuntimeTypeReference | UndefinedTypeError => {
+  let resolvedType = cloneDeep(type)
+  if (isRuntimeTypeReference(resolvedType)) {
+    const typeName = resolvedType.value
+    if (typeEnv[typeName] !== undefined) {
+      // Has type argument
+      if (typeEnv[typeName] === REFERENCE_TO_TYPE_PARAMETER) {
+        return resolvedType
       }
-    }
-  }
-  if (isRuntimeTypeReference(returnType)) {
-    if (typeParams.includes(returnType.value)) {
-      // don't need to change anything
-    } else if (typeEnv && typeEnv.hasOwnProperty(returnType.value)) {
-      expectedTypeClone.returnType = typeEnv[returnType.value]
+      resolvedType = typeEnv[typeName] as RuntimeType
     } else {
-      const typeInCurrentEnvOrError = lookupType(env, returnType.value, node)
+      // Needs to be looked up
+      const typeInCurrentEnvOrError = lookupType(env, typeName, node)
       if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
-        // NOTE: should not happen, should be checked during function declaration instead
+        console.log(`error!! ${JSON.stringify(type)}`)
+        console.log(typeInCurrentEnvOrError)
+        console.log(typeEnv)
         return typeInCurrentEnvOrError
       }
-      expectedTypeClone.returnType = typeInCurrentEnvOrError
+      resolvedType = typeInCurrentEnvOrError
     }
   }
-  return expectedTypeClone
+  // The referenced type may be a function, in which case it also needs to be resolved.
+  // (Hence, `if` and not `else if`.)
+  if (isRuntimeFunctionType(resolvedType)) {
+    const newTypeEnv = { ...typeEnv }
+    resolvedType.typeParams.forEach(param => (newTypeEnv[param] = REFERENCE_TO_TYPE_PARAMETER))
+    for (let i = 0; i < resolvedType.paramTypes.length; i++) {
+      // Use a for loop to terminate once error is found
+      const resolvedParamType = resolveToActualType(
+        resolvedType.paramTypes[i],
+        newTypeEnv,
+        env,
+        node
+      )
+      if (resolvedParamType instanceof UndefinedTypeError) {
+        return resolvedParamType
+      }
+      resolvedType.paramTypes[i] = resolvedParamType
+    }
+    const resolvedReturnType = resolveToActualType(resolvedType.returnType, newTypeEnv, env, node)
+    if (resolvedReturnType instanceof UndefinedTypeError) {
+      return resolvedReturnType
+    }
+    resolvedType.returnType = resolvedReturnType
+  }
+  // In all other cases the type is already a base type
+  return resolvedType
 }
 
 export const checkTypeOfArguments = (
@@ -582,41 +612,31 @@ export const checkTypeOfArguments = (
     const typeParamName = functionType.typeParams[i]
     typeEnv[typeParamName] = typeArgs[i]
   }
+
+  // resolve expected types
+  const expectedParamTypes = [...functionType.paramTypes] // clone the array
+  for (let i = 0; i < expectedParamTypes.length; i++) {
+    const resolvedParamType = resolveToActualType(expectedParamTypes[i], typeEnv, env, node)
+    if (resolvedParamType instanceof UndefinedTypeError) {
+      // NOTE: should not happen since it's already checked during function declaration
+      return resolvedParamType
+    }
+    expectedParamTypes[i] = resolvedParamType
+  }
+
+  // then check that they match
   const paramTypes = functionType.paramTypes
   const argTypes = args.map(typedValue => typedValue.type)
   for (let i = 0; i < paramTypes.length; i++) {
-    let expectedParamType = paramTypes[i]
-    // Deal with type references
-    if (isRuntimeTypeReference(expectedParamType)) {
-      const typeName = expectedParamType.value
-      if (typeEnv[typeName] !== undefined) {
-        // Check the potential new environment first
-        expectedParamType = typeEnv[typeName]
-      } else {
-        const typeInCurrentEnvOrError = lookupType(env, typeName, node)
-        if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
-          // NOTE: should not happen since it's already checked during function declaration
-          return typeInCurrentEnvOrError
-        }
-        expectedParamType = typeInCurrentEnvOrError
-      }
-    }
-    if (isRuntimeFunctionType(expectedParamType)) {
-      const typeOrError = resolveFunctionType(expectedParamType, node, env, typeEnv)
-      if (typeOrError instanceof UndefinedTypeError) {
-        return typeOrError
-      }
-      expectedParamType = typeOrError
-    }
-    if (!isMatchingType(expectedParamType, argTypes[i])) {
+    if (!isMatchingType(expectedParamTypes[i], argTypes[i])) {
       // if (!isRuntimeAny(expectedParamType) && !isMatchingType(expectedParamType, argTypes[i])) {
       // TODO: follow TS error message
       return new TypeError(
         node,
         // TODO: name of parameter instead of index
-        ` as argument ${i + 1}`,
+        ` as argument ${i}`,
         // TODO: stack trace so the substitution is clearer
-        rttToString(expectedParamType),
+        rttToString(expectedParamTypes[i]),
         rttToString(argTypes[i])
       )
     }
@@ -630,30 +650,24 @@ export const checkTypeOfReturnValue = (
   result: TypedValue,
   env: Environment
 ) => {
-  let expectedReturnType = functionType.returnType
-  if (isRuntimeTypeReference(expectedReturnType)) {
-    const typeName = expectedReturnType.value
-    const typeInCurrentEnvOrError = lookupType(env, typeName, node)
-    if (typeInCurrentEnvOrError instanceof UndefinedTypeError) {
-      // NOTE: should not happen since it's already checked during function declaration
-      return typeInCurrentEnvOrError
-    }
-    expectedReturnType = typeInCurrentEnvOrError
+  const expectedReturnType = resolveToActualType(functionType.returnType, {}, env, node)
+  if (expectedReturnType instanceof UndefinedTypeError) {
+    return expectedReturnType
   }
-  if (isRuntimeFunctionType(expectedReturnType)) {
-    const typeOrError = resolveFunctionType(expectedReturnType, node, env)
-    if (typeOrError instanceof UndefinedTypeError) {
-      return typeOrError
-    }
-    expectedReturnType = typeOrError
+  // TODO: spec for this
+  const actualReturnType = resolveToActualType(result.type, {}, env, node)
+  if (actualReturnType instanceof UndefinedTypeError) {
+    return actualReturnType
+  } else if (actualReturnType.kind === 'name') {
+    throw Error() // TODO: ensure this can't happen
   }
-  if (!isMatchingType(expectedReturnType, result.type)) {
+  if (!isMatchingType(expectedReturnType, actualReturnType)) {
     // if (!isRuntimeAny(expectedReturnType) && !isMatchingType(expectedReturnType, result.type)) {
     return new TypeError(
       node,
       ' as return value',
       rttToString(expectedReturnType),
-      rttToString(result.type)
+      rttToString(actualReturnType)
     )
   }
   return undefined
