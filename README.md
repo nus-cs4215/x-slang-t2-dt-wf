@@ -1,8 +1,105 @@
-Open-source implementations of the programming language *Source*. Source
-is a series of small subsets of JavaScript, designed for teaching
-university-level programming courses for computer science majors,
-following Structure and Interpretation of Computer Programs, JavaScript
-Adaptation (<https://sicp.comp.nus.edu.sg>).
+# Dynamic TypeScript
+
+Implementation of a TypeScript variant that uses dynamic type checking.
+
+## Example Programs
+
+```ts
+function repeat<T>(val: T, n: number, f: (x: T) => T): T {
+   return n === 0
+       ? val
+       : repeat<T>(f(val), n - 1, f);
+}
+
+repeat<number>(0, 10, (x: number): number => x + 1); 
+// 10
+repeat<string>("", 3, (s: string): string => s + "abc"); 
+// "abcabcabc"
+```
+
+
+```ts
+function f<T>(x: T): T { 
+    return x; 
+}
+const g: <S>(y: S) => S = f;
+
+f<number>(1);
+f<string>("hello");
+```
+
+```ts
+function f<T>(x: <S>(y: S) => S, y: T): T { 
+    return x<T>(y); 
+}
+
+function g<R>(z: R): R { 
+    return z; 
+}
+f<number>(g, 1);
+
+const y: (x: string) => boolean = 
+    f<(x: string) => boolean>(g, (y: string): boolean => y < 'hello');
+y('abcde');
+y('world');
+
+// The following produce errors
+f<number>((x: number): number => x < 0 ? 0 : x, -1)
+function f<T>(x: <S>(y: S) => S, y: S): T { 
+    return x<T>(y); 
+}
+function f<T>(x: <S>(y: S) => (z: T) => R, y: T): T { 
+    return x<T>(y); 
+}
+```
+
+```ts
+const foo: <S>(x: S) => boolean = <T>(y: T): boolean => { 
+    const x: T = y; 
+    return x === y; 
+};
+foo<number>(1);
+```
+
+```ts
+const foo = <T>(x: T): <S>(y: S) => <R>(z: R) => T => { 
+    function g<S>(y: S): <R>(z: R) => T {
+        function h<R>(z: R) {
+            return x;
+        }
+        return h;
+    }
+    return g; 
+};
+const f1 = foo<number>(1);
+const f2 = f1<string>("hello");
+f2<boolean>(true)
+```
+
+```ts
+const goo = <T>(f: (z: T) => T, y: T): T => { 
+    return f(y); 
+};
+goo<number>((x: number): number => x + 1, 2);
+```
+
+```ts
+function f<T, P>(z: T): (x: T, y: P) => P { 
+    const g: <R>(x: T, y: R) => R = <R>(x: T, y: R): R => y; 
+    return g; 
+}
+const foo = f<number, string>(1); 
+// Error: Expected (number, string) => string as return value, got (number, type 'R') => type 'R'.
+
+function f<T, P>(z: T): (x: T, y: P) => P { 
+    const g: <R>() => (x: T, y: R) => R = <R>(): (x: T, y: R) => R => (x: T, y: R): R => y; 
+    return g<P>(); 
+}
+const foo = f<number, string>(1); 
+// type of foo: (number, string) => string
+foo(2, "hello");
+// string: "hello"
+```
 
 Usage
 =====
