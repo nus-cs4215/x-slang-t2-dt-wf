@@ -160,11 +160,11 @@ export type RuntimeUndefined = { kind: 'undefined' }
 export type RuntimeFunctionType = {
   kind: 'function'
   typeParams: TypeName[]
-  paramTypes: (RuntimeType | RuntimeTypeReference)[]
-  returnType: RuntimeType | RuntimeTypeReference
+  paramTypes: (RuntimeType | RuntimeTypeReference | RuntimeAny)[]
+  returnType: RuntimeType | RuntimeTypeReference | RuntimeAny
 }
 export type RuntimeTypeReference = { kind: 'name'; value: TypeName }
-// export type RuntimeAny = { kind: 'any' }
+export type RuntimeAny = { kind: 'any' }
 
 // tslint:disable:no-any
 export interface Frame {
