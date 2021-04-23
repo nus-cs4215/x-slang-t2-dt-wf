@@ -5,6 +5,7 @@ Welcome to the Dynamic TypeScript!
 Dynamic TypeScript is a variant of TypeScript that uses TypeScript syntax with dynamic type checking. Its language features are similar to Source §1, but with type annotations. Our project comprises of two components, x-slang and x-frontend. The playground provides detail information when error occurs for better debugging experiences.
 
 Source§1 is documented here: <https://sicp.comp.nus.edu.sg/source/>
+Dynamic TypeScript is documented here: <>
 
 About Dynamic TypeScript
 =====
@@ -88,7 +89,6 @@ id<number>(1);
 id<string>(“hello”);
 ```
 Note: Type Argument are compulsory but unlike Source, semi-colons are not required due to babel parser’s limitations. 
-
 
 
 
@@ -208,23 +208,31 @@ instructions, then run
 
 ``` {.}
 $ cd dist
-$ npm link
+$ yarn link
 ```
 
+The Makefile is there to help you build and run the program. Simply key in 
+``` {.}
+make ts
+```
+will run the program automatically.
+
+``` {.}
+ts:
+	yarn tsc && node dist/repl/repl.js --variant=typescript
+
+run:
+	node dist/repl/repl.js --variant=typescript
+```
+
+
 If you do not wish to add \"x-slang\" to your PATH, replace
-\"x-slang\" with \"node dist/repl/repl.js\" in the following examples.
+\"x-slang\" with \"node dist/repl/repl.js\ --variant=typescript" in the following examples.
 
 To try out *Source* in a REPL, run
 
 ``` {.}
 $ x-slang '1 * 1'
-```
-
-Hint: In `bash` you can take the `PROGRAM_STRING` out
-of a file as follows:
-
-``` {.}
-$ x-slang "$(< my_source_program.js)"
 ```
 
 
