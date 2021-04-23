@@ -298,7 +298,6 @@ const stringifyTSFunctionType = (node: babel.TSFunctionType) =>
   (node.parameters.length === 1 ? '' : ')') +
   ' => ...'
 
-// TODO: decide which node to accept
 function lookupType(env: Environment, name: string, node: babel.Node) {
   let environment: Environment = env
   while (true) {
@@ -424,7 +423,7 @@ export const typeOfFunction = (
  *
  * For example, for `<S>(x: S): T`, the type reference `T`
  * should be replaced by the value of `T` in `typeEnv` if such a name binding exists.
- * Otherwise, we look up the value of `T` in `env` (TODO: an error is thrown if this does not exist).
+ * Otherwise, we look up the value of `T` in `env`.
  * If `T` = `number`, the runtime type `<S>(x: S): number` should be returned.
  *
  * A type reference may be returned for intermediate recursive calls.
@@ -599,7 +598,6 @@ export const getTypeArgs = (node: babel.TSTypeParameterInstantiation | null, env
   })
   for (const typeArgOrError of typeArgs) {
     if (typeArgOrError instanceof UndefinedTypeError) {
-      // TODO: better way to pass error value
       return typeArgOrError // error
     }
   }
@@ -638,9 +636,7 @@ export const checkTypeOfArguments = (
       // if (!isRuntimeAny(expectedParamType) && !isMatchingType(expectedParamType, argTypes[i])) {
       return new TypeError(
         node,
-        // TODO: name of parameter instead of index
         ` as argument ${i}`,
-        // TODO: stack trace so the substitution is clearer
         rttToString(expectedParamTypes[i]),
         rttToString(argTypes[i])
       )
@@ -681,7 +677,11 @@ export const checkTypeOfReturnValue = (
 
 const rttToString = (t: RuntimeType | RuntimeTypeReference /* | RuntimeAny */): string =>
   isRuntimeFunctionType(t)
-    ? `(${t.paramTypes.map(type => rttToString(type)).join(', ')}) => ${rttToString(t.returnType)}`
+    ? `${
+        t.typeParams.length === 0
+          ? ''
+          : `<${t.typeParams.reduce((prev, curr) => prev + curr + ', ', '').slice(undefined, -2)}>`
+      }(${t.paramTypes.map(type => rttToString(type)).join(', ')}) => ${rttToString(t.returnType)}`
     : isRuntimeTypeReference(t)
     ? `type '${t.value}'`
     : t.kind
