@@ -4,8 +4,7 @@ Welcome to the Dynamic TypeScript!
 
 Dynamic TypeScript is a variant of TypeScript that uses TypeScript syntax with dynamic type checking. Its language features are similar to Source §1, but with type annotations. Our project comprises of two components, x-slang and x-frontend. The playground provides detail information when error occurs for better debugging experiences.
 
-Source§1 is documented here: <https://sicp.comp.nus.edu.sg/source/>\
-Dynamic TypeScript is documented here: <>
+[The specification can be found here](dynamic_typescript.pdf)
 
 About Dynamic TypeScript
 =====
