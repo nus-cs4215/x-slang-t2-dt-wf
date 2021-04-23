@@ -51,9 +51,7 @@ The main changes are summarised below.
 
 \subsection{Type Annotations}
 
-Constant declarations can have optional type annotations. 
-For functions, all parameter types and return types must be annotated.
-(Note that this means that single parameters in lambda expressions must also be enclosed in brackets.)
+Constant declarations, function parameter types, and function return types can have optional type annotations. 
 
 \subsection{Polymorphic Functions}
 
@@ -90,11 +88,11 @@ The syntax rules for \DynamicTS{} are as follows:
                                            \textbf{\texttt{=}}\  \textit{expr} \ (\textbf{\texttt{;}})
                                                            && \textrm{annotated constant declaration} \\
 &&                       && |   &\quad && \textbf{\texttt{function}}\  \textit{name} \ 
-                                   \textbf{\texttt{(}}\  \textit{parameters} \ \textbf{\texttt{):}} \textit{type}\ \textit{block} \quad
+                                   \textbf{\texttt{(}}\  \textit{parameters} \ \textbf{\texttt{)}} (\code{:} \textit{type})\ \textit{block} \quad
                                                            && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p4}{function declaration}}\\
 &&                       && |   &\quad && \textbf{\texttt{function}}\ \textit{name} \ \code{<} \textit{type-params} \code{>(}
                                                            && \\
-&&                       &&     &\quad && \quad\quad\  \textit{parameters} \ \textbf{\texttt{):}} \textit{type}\ \textit{block} \quad
+&&                       &&     &\quad && \quad\quad\  \textit{parameters} \ \textbf{\texttt{)}} (\code{:} \textit{type})\ \textit{block} \quad
                                                            && \textrm{generic function declaration }\\
 &&                       && |   &\quad && \textbf{\texttt{return}}\  \textit{expr} \ (\textbf{\texttt{;}})
                                                            && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p4}{return statement}}\\
@@ -107,14 +105,15 @@ The syntax rules for \DynamicTS{} are as follows:
 && \textit{type}         && ::= & && \code{number} && \textrm{primitive number type} \\
 &&                       && |   &\quad && \code{boolean} && \textrm{primitive boolean type} \\ 
 &&                       && |   &\quad && \code{string} && \textrm{primitive string type} \\ 
+&&                       && |   &\quad && \code{any} && \textrm{primitive any type} \\ 
 &&                       && |   &\quad && \textit{name} && \textrm{type reference} \\
 &&                       && |   &\quad && \code{(}\ \textit{parameters}\ \code{) => } \textit{type} 
                                             && \textrm{function type} \\
 &&                       && |   &\quad && \code{<} \textit{type-params} \code{>(}\ 
                                             \textit{parameters}\ \code{) => } \textit{type} 
                                             && \textrm{generic function type} \\[1mm]
-&& \textit{parameters}   && ::= &\quad &&  \epsilon\ | \  \textit{name} \code{:} \textit{type} \ 
-                                                   (\ \textbf{\texttt{,}} \ \textit{name}\code{:} \textit{type}\ )\ \ldots
+&& \textit{parameters}   && ::= &\quad &&  \epsilon\ | \  \textit{name} (\code{:} \textit{type}) \ 
+                                                   (\ \textbf{\texttt{,}} \ \textit{name} (\code{:} \textit{type})\ )\ \ldots
                                                             && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p4}{function parameters}}   \\[1mm]
 && \textit{type-params}   && ::= &\quad &&  \textit{name} \ (\ \code{,} \ \textit{name}\ )\ \ldots
                                                 && \textrm{type parameters}   \\[1mm]
@@ -148,22 +147,22 @@ The syntax rules for \DynamicTS{} are as follows:
                                             \textbf{\texttt{(}}\ \textit{expressions}\
                                             \textbf{\texttt{)}}
                                                            && \textrm{generic function application}\\
-&&                       && |   &\quad &&   \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\ 
-                                            \textit{type}\ 
+&&                       && |   &\quad &&   \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{)}} (\code{:}\ 
+                                            \textit{type})\ 
                                             \texttt{\textbf{=>}}\ \textit{expr}
                                                            && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.3.2.html}{lambda expression (expr. body)}}\\
 &&                       && |   &\quad &&   \code{<} \textit{type-params} \code{>}
-                                            \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\ 
-                                            \textit{type}\ 
+                                            \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{)}} (\code{:}\ 
+                                            \textit{type})\ 
                                             \texttt{\textbf{=>}}\ \textit{expr}
                                                            \\
-&&                       && |   &\quad &&   \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\
-                                            \textit{type}\ 
+&&                       && |   &\quad &&   \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{)}} (\code{:}\
+                                            \textit{type})\ 
                                             \texttt{\textbf{=>}}\ \textit{block}
                                                            && \textrm{\href{https://source-academy.github.io/sicp/chapters/2.2.4.html\#footnote-3}{lambda expression (block body)}}\\
 &&                       && |   &\quad &&   \code{<} \textit{type-params} \code{>}
-                                            \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\ 
-                                            \textit{type}\ 
+                                            \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{)}} (\code{:}\ 
+                                            \textit{type})\ 
                                             \texttt{\textbf{=>}}\ \textit{block}
                                                            \\
 &&                       && |   &\quad &&   \textit{expr} \ \textbf{\texttt{?}}\ 
@@ -256,17 +255,17 @@ where Env and TypeEnv are defined as follows:
 
 \subsubsection*{Types}
 
-Since type names are never re-assigned, each type expression in a \DynamicTS{} program is mapped directly to a runtime type.
+Each type expression in a \DynamicTS{} program can be mapped directly to a runtime type based on its type environment.
 
-Primitive types are mapped to their runtime equivalents (i.e. runtime number, runtime boolean, runtime string). 
+Primitive types are mapped to their runtime equivalents (i.e. runtime number, runtime boolean, runtime string, runtime any). 
+Note that no program will evaluate to a value with the runtime type \verb|any|.
 A runtime undefined type is used as the result type for non-value-producing statements (e.g. constant declarations).
 
 A runtime function type consists of a list of type parameters, a list of parameter types (which are themselves runtime types), and a return type (which is a runtime type).
 \DynamicTS{} function types are mapped to their runtime equivalents by recursively converting the parameter and return types. 
 
-Implementations should also allow for runtime type references to deal with generic function types.
-However, type names are resolved to their actual types where possible (the exact behaviour is described in the last paragraph of section \ref{generics1}).
-
+Implementations should also have runtime type references to deal with generic function types.
+However, since type names are never re-assigned, they should be resolved to their actual types whenever possible (the exact behaviour is described in the last paragraph of section \ref{generics1}).
 
 \subsubsection*{Primitive expressions}
 
@@ -299,8 +298,8 @@ operator & operand 1 & operand 2 & result\\ \hline
 \texttt{\textbf{>=}} & string   & string     & bool\\
 \texttt{\textbf{<=}}    & number   & number     & bool\\
 \texttt{\textbf{<=}} & string   & string     & bool\\
-\texttt{\textbf{\&\&}} & bool & any & any \\
-\texttt{\textbf{||}}   & bool & any & any \\
+\texttt{\textbf{\&\&}} & bool & T & T \\
+\texttt{\textbf{||}}   & bool & T & T \\
 \texttt{\textbf{!}}    & bool &      & bool\\
 \texttt{\textbf{-}}    & number &    & number
 \end{tabular}
@@ -325,7 +324,7 @@ In the case of annotated constant declarations, the type annotation is first con
 $t_{expected}$ is then checked to ensure it is \textbf{valid} in the current TypeEnv, which means that if $t_{expected}$ contains a reference to a name $y$, there must be some type $t_{resolved}$ such that TypeEnv($y$) = $t_{resolved}$.
 
 Finally, implementations must check that $t_{expected}$ and $t_1$ are \textbf{equal}.
-At a basic level, two types are equal if and only if they are both primitive types (number/boolean/string) and have the same type, or they are function types and all of their parameter and return types are equal.
+At a basic level, two types are equal if and only if either type is \verb|any|, or they are both primitive types (number/boolean/string) and have the same type, or they are function types and all of their parameter and return types are equal.
 
 A formal definition of validity and type equality is provided in section \ref{generics1}.
 
@@ -334,7 +333,7 @@ A formal definition of validity and type equality is provided in section \ref{ge
 
 Like in Source \S 1, function declarations are treated as constant declarations with a lambda expression value. A lambda expression is evaluated to a closure, i.e. (\textit{parameters}, \textit{body}, \textit{environment}, \textit{type-environment}), and a function type. 
 
-Implementations should first ensure that all parameter and return types are annotated, and show an error message otherwise.
+If any parameter or return type is not present, it is inferred to be a runtime \verb|any| type.
 
 Implementations should also check that the runtime function type corresponding to the given type annotations is \textit{valid} in TypeEnv (as defined above).
 
@@ -368,9 +367,9 @@ Otherwise, an error message is shown.
 \textbf{Tail call optimisation}
 
 \DynamicTS{} supports proper tail calls. 
-If a function's return statement only contains a function application, the function's environment is reused in the next .
+If a function's return statement only contains a function application, the function's environment frame is reused.
 
-In this case, type checking proceeds in the same way as normal function applications.
+In this case, type checking proceeds in the same way as normal function applications, except that the return type is only checked when the original function call returns.
 
 \subsubsection*{Polymorphic (Generic) Function Declaration}
 \label{generics1}
@@ -406,6 +405,7 @@ On the other hand, the type annotation $R$ for the return type of the return typ
 
 Hence, two types $t_1$ and $t_2$ are equal in the context of $TTEnv_1$ and $TTEnv_2$ if and only if:
 \begin{itemize}
+    \item Either $t_1$ or $t_2$ is a runtime \verb|any| type.
     \item They are the same primitive type (number/boolean/string).
     \item They are both type references and the type names that they reference have the same position in their respective $TTEnv$.
     \item They are both function types and their parameter and return types are equal in the context of $TTEnv_1$ and $TTEnv_2$.
