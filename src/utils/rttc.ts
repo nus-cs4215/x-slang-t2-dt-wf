@@ -5,7 +5,7 @@ import { MissingTypeAnnotationError, TypeError, UndefinedTypeError } from '../er
 import { RuntimeSourceError } from '../errors/runtimeSourceError'
 import {
   Environment,
-  RuntimeAny,
+  // RuntimeAny,
   RuntimeBoolean,
   RuntimeFunctionType,
   RuntimeNumber,
@@ -31,7 +31,7 @@ export const runtimeBoolean: RuntimeBoolean = { kind: 'boolean' }
 export const runtimeNumber: RuntimeNumber = { kind: 'number' }
 export const runtimeString: RuntimeString = { kind: 'string' }
 export const runtimeUndefined: RuntimeUndefined = { kind: 'undefined' }
-export const runtimeAny: RuntimeAny = { kind: 'any' }
+// export const runtimeAny: RuntimeAny = { kind: 'any' }
 
 // We need to define our own typeof in order for null/array to display properly in error messages
 export const typeOf = (v: Value): RuntimeType => {
@@ -66,10 +66,10 @@ const isBool = (v: TypedValue) => v.type.kind === 'boolean'
 // const isArray = (v: Value) => typeOf(v) === 'array'
 
 const isRuntimeFunctionType = (
-  t: RuntimeType | RuntimeTypeReference | RuntimeAny
+  t: RuntimeType | RuntimeTypeReference // | RuntimeAny
 ): t is RuntimeFunctionType => t.kind === 'function'
 const isRuntimeTypeReference = (
-  t: RuntimeType | RuntimeTypeReference | RuntimeAny
+  t: RuntimeType | RuntimeTypeReference // | RuntimeAny
 ): t is RuntimeTypeReference => t.kind === 'name'
 // const isRuntimeAny = (t: RuntimeType | RuntimeTypeReference | RuntimeAny): t is RuntimeAny =>
 //   t.kind === 'any'
@@ -104,7 +104,7 @@ export const convertToRuntimeType = (t: babel.TSType): RuntimeType | RuntimeType
     case 'TSThisType':
       throw new Error('TS This Types are not supported in x-slang')
     case 'TSUndefinedKeyword':
-      return runtimeUndefined
+      throw new Error('TS Undefined Keywords are not supported in x-slang')
     case 'TSVoidKeyword':
       throw new Error('TS Void Keywords are not supported in x-slang') // TODO: when adding functions
     case 'TSFunctionType':
@@ -659,7 +659,6 @@ export const checkTypeOfReturnValue = (
   if (expectedReturnType instanceof UndefinedTypeError) {
     return expectedReturnType
   }
-  // TODO: spec for this
   const actualReturnType = resolveToActualType(result.type, {}, env, node)
   if (actualReturnType instanceof UndefinedTypeError) {
     return actualReturnType
@@ -680,7 +679,7 @@ export const checkTypeOfReturnValue = (
 
 // Utility functions
 
-const rttToString = (t: RuntimeType | RuntimeTypeReference | RuntimeAny): string =>
+const rttToString = (t: RuntimeType | RuntimeTypeReference /* | RuntimeAny */): string =>
   isRuntimeFunctionType(t)
     ? `(${t.paramTypes.map(type => rttToString(type)).join(', ')}) => ${rttToString(t.returnType)}`
     : isRuntimeTypeReference(t)

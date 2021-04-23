@@ -148,7 +148,6 @@ export type RuntimeType =
   | RuntimeString
   | RuntimeUndefined
   | RuntimeFunctionType
-  | { kind: 'unknown' } // to debug and remove before submission
 
 export type TypeName = string
 export type RuntimeNumber = { kind: 'number' }
@@ -162,7 +161,7 @@ export type RuntimeFunctionType = {
   returnType: RuntimeType | RuntimeTypeReference
 }
 export type RuntimeTypeReference = { kind: 'name'; value: TypeName }
-export type RuntimeAny = { kind: 'any' }
+// export type RuntimeAny = { kind: 'any' }
 
 // tslint:disable:no-any
 export interface Frame {
