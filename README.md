@@ -36,10 +36,10 @@ We use babel/Parser APIs to handle our syntax validation process i.e., AST gener
 @babel/parser
 The Babel parser (previously Babylon) is a JavaScript parser used in Babel.
 
-1.The latest ECMAScript version enabled by default (ES2020).
-2.Comment attachment.
-3.Support for JSX, Flow, Typescript.
-4.Support for experimental language proposals (accepting PRs for anything at least stage-0).
+1.The latest ECMAScript version enabled by default (ES2020).\
+2.Comment attachment.\
+3.Support for JSX, Flow, Typescript.\
+4.Support for experimental language proposals (accepting PRs for anything at least stage-0).\
 
 @babel/parser is documented here: <https://babeljs.io/docs/en/babel-parser>
 
@@ -279,3 +279,8 @@ $ yarn link "x-slang"
 ```
 
 Then start the frontend and the new x-slang will be used. 
+
+
+Our Presentation Slides
+===========================================
+You can find the slides from here <https://docs.google.com/presentation/d/1XfzG18aVm5IXMWypXlmBllvWFPOVmQaDfQXkMBRY2YA/edit?usp=sharing>
