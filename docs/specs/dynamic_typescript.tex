@@ -1,0 +1,448 @@
+\input source_header.tex
+\usepackage{geometry}
+\newgeometry{left=2cm, right=2cm, top=3cm, bottom=3cm}
+
+
+\newcommand{\Rule}[2]{\genfrac{}{}{0.7pt}{}{{\setlength{\fboxrule}{0pt}\setlength{\fboxsep}{3mm}\fbox{$#1$}}}{{\setlength{\fboxrule}{0pt}\setlength{\fboxsep}{3mm}\fbox{$#2$}}}}
+
+\newcommand{\TruE}{\textbf{\texttt{true}}}
+\newcommand{\FalsE}{\textbf{\texttt{false}}}
+\newcommand{\Rc}{\texttt{\}}}
+\newcommand{\Lc}{\texttt{\{}}
+\newcommand{\Rp}{\texttt{)}}
+\newcommand{\Lp}{\texttt{(}}
+\newcommand{\Rb}{\texttt{>}}
+\newcommand{\Lb}{\texttt{<}}
+\newcommand{\Fun}{\textbf{\texttt{function}}}
+\newcommand{\Let}{\textbf{\texttt{let}}}
+\newcommand{\Return}{\textbf{\texttt{return}}}
+\newcommand{\Const}{\textbf{\texttt{const}}}
+\newcommand{\Type}{\textbf{\texttt{type}}}
+\newcommand{\If}{\textbf{\texttt{if}}}
+\newcommand{\Else}{\textbf{\texttt{else}}}
+\newcommand{\Bool}{\texttt{bool}}
+\newcommand{\Number}{\texttt{number}}
+\newcommand{\String}{\texttt{string}}
+\newcommand{\Undefined}{\texttt{undefined}}
+\newcommand{\Void}{\texttt{void}} % for return type annotations
+\newcommand{\Any}{\texttt{any}}
+\newcommand{\Null}{\texttt{null}}
+
+% Name of language variant (for convenience in case we need to change later)
+\newcommand{\DynamicTS}{Dynamic TypeScript \S 1}
+
+% Formatting
+\newcommand{\Eval}{\mapsto_{TS_D}}
+\newcommand{\code}[1]{\textbf{\texttt{#1}}}
+
+\newtheorem{definition}{Definition}[section]
+
+\begin{document}
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	\docheader{2021}{Dynamic TypeScript}{\S 1}{Dorcas Tan, Wei Feng}
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Introduction}
+
+\DynamicTS{} is a variant of TypeScript that makes use of dynamic type checking instead of the usual static type checking. 
+It parallels Source \S 1 in scope, maintaining most of its syntax, but it also introduces TypeScript's type annotations to allow for type checking.
+
+The main changes are summarised below.
+
+\subsection{Type Annotations}
+
+Constant declarations can have optional type annotations. 
+For functions, all parameter types and return types must be annotated.
+(Note that this means that single parameters in lambda expressions must also be enclosed in brackets.)
+
+\subsection{Polymorphic Functions}
+
+Functions can also be declared with type parameters, allowing them to be applied to arguments of different types as long as they meet certain constraints.
+When applying a generic function, the type arguments (i.e. instantiation of type parameters) must be specified.
+
+Here is an example of a polymorphic function:
+\begin{verbatim}
+function repeat<T>(val: T, n: number, f: (x: T) => T): T {
+   return n === 0
+       ? val
+       : repeat<T>(f(val), n - 1, f);
+}
+repeat<number>(0, 10, (x: number): number => x + 1);
+repeat<string>("", 3, (s: string): string => s + "abc");
+\end{verbatim}
+
+\subsection{Differences from Source \S 1}
+
+Apart from the obvious semantic differences due to type checking, \DynamicTS{} does not support import and export directives.
+
+
+\section{Syntax}
+
+The syntax rules for \DynamicTS{} are as follows:
+
+\begin{alignat*}{9}
+&& \textit{program}    &&\quad ::= &\quad && \textit{statement} \ \ldots
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/3.1.1.html\#p6}{program}} \\[1mm]
+&& \textit{statement}    &&\quad ::= &\quad && \textbf{\texttt{const}}\  \textit{name} \ 
+                                           \textbf{\texttt{=}}\  \textit{expr} \ (\textbf{\texttt{;}})
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.2.html\#p2}{constant declaration}} \\
+&&                       && |   &\quad && \textbf{\texttt{const}}\  \textit{name} \code{:}\ \textit{type} \ 
+                                           \textbf{\texttt{=}}\  \textit{expr} \ (\textbf{\texttt{;}})
+                                                           && \textrm{annotated constant declaration} \\
+&&                       && |   &\quad && \textbf{\texttt{function}}\  \textit{name} \ 
+                                   \textbf{\texttt{(}}\  \textit{parameters} \ \textbf{\texttt{):}} \textit{type}\ \textit{block} \quad
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p4}{function declaration}}\\
+&&                       && |   &\quad && \textbf{\texttt{function}}\ \textit{name} \ \code{<} \textit{type-params} \code{>(}
+                                                           && \\
+&&                       &&     &\quad && \quad\quad\  \textit{parameters} \ \textbf{\texttt{):}} \textit{type}\ \textit{block} \quad
+                                                           && \textrm{generic function declaration }\\
+&&                       && |   &\quad && \textbf{\texttt{return}}\  \textit{expr} \ (\textbf{\texttt{;}})
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p4}{return statement}}\\
+&&                       && |   &\quad && \textit{if-statement} \quad
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.3.2.html\#p13}{conditional statement}}\\
+&&                       && |   &\quad &&  \textit{block} 
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.8.html\#p14}{block statement}}\\
+&&                       && |   &\quad &&  \textit{expr} \ (\textbf{\texttt{;}})
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.1.html\#p3}{expression statement}} \\[1mm]
+&& \textit{type}         && ::= & && \code{number} && \textrm{primitive number type} \\
+&&                       && |   &\quad && \code{boolean} && \textrm{primitive boolean type} \\ 
+&&                       && |   &\quad && \code{string} && \textrm{primitive string type} \\ 
+&&                       && |   &\quad && \textit{name} && \textrm{type reference} \\
+&&                       && |   &\quad && \code{(}\ \textit{parameters}\ \code{) => } \textit{type} 
+                                            && \textrm{function type} \\
+&&                       && |   &\quad && \code{<} \textit{type-params} \code{>(}\ 
+                                            \textit{parameters}\ \code{) => } \textit{type} 
+                                            && \textrm{generic function type} \\[1mm]
+&& \textit{parameters}   && ::= &\quad &&  \epsilon\ | \  \textit{name} \code{:} \textit{type} \ 
+                                                   (\ \textbf{\texttt{,}} \ \textit{name}\code{:} \textit{type}\ )\ \ldots
+                                                            && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p4}{function parameters}}   \\[1mm]
+&& \textit{type-params}   && ::= &\quad &&  \textit{name} \ (\ \code{,} \ \textit{name}\ )\ \ldots
+                                                && \textrm{type parameters}   \\[1mm]
+&& \textit{if-statement} && ::= &\quad &&  \textbf{\texttt{if}}\
+                                   \textbf{\texttt{(}}\ \textit{expr} \ \textbf{\texttt{)}}\ 
+                                   \textit{block} \\
+&&                       &&     &      && \textbf{\texttt{else}}\
+                                          (\ \textit{block}
+                                          \ | \
+                                          \textit{\href{https://source-academy.github.io/sicp/chapters/1.3.3.html\#footnote-1}{if-statement}} \ )
+                                                            && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.3.2.html\#p12}{conditional statement}}   \\[1mm]
+&& \textit{block}        && ::= &      && \textbf{\texttt{\{}}\  \textit{statement}\ \ldots   \ \textbf{\texttt{\}}} \quad
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.8.html\#p14}{block statement}}\\[1mm]         
+&& \textit{expr}   && ::= &\quad &&  \textit{number}   && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.1.html\#p3}{primitive number expression}}\\
+&&                       && |   &\quad && \textbf{\texttt{true}}\ |\ \textbf{\texttt{false}}
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.6.html\#p1}{primitive boolean expression}}\\
+&&                       && |   &\quad &&  \textit{string}   && \textrm{\href{https://source-academy.github.io/sicp/chapters/2.3.1.html}{primitive string expression}}\\
+&&                       && |   &\quad &&  \textit{name}   && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.2.html}{name expression}}\\
+&&                       && |   &\quad &&  \textit{expr} \  \textit{binary-operator} \ 
+                                            \textit{expr} \qquad
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.1.html\#p5}{binary operator combination}}\\
+&&                       && |   &\quad &&   \textit{unary-operator} \ 
+                                            \textit{expr}
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.6.html\#p4}{unary operator combination}}\\
+&&                       && |   &\quad &&   \textit{expr} \ 
+                                            \textbf{\texttt{(}}\ \textit{expressions}\
+                                            \textbf{\texttt{)}}
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p5}{function application}}\\
+&&                       && |   &\quad &&   \textit{expr} \ 
+                                            \code{<} \textit{types} \code{>}
+                                            \textbf{\texttt{(}}\ \textit{expressions}\
+                                            \textbf{\texttt{)}}
+                                                           && \textrm{generic function application}\\
+&&                       && |   &\quad &&   \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\ 
+                                            \textit{type}\ 
+                                            \texttt{\textbf{=>}}\ \textit{expr}
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.3.2.html}{lambda expression (expr. body)}}\\
+&&                       && |   &\quad &&   \code{<} \textit{type-params} \code{>}
+                                            \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\ 
+                                            \textit{type}\ 
+                                            \texttt{\textbf{=>}}\ \textit{expr}
+                                                           \\
+&&                       && |   &\quad &&   \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\
+                                            \textit{type}\ 
+                                            \texttt{\textbf{=>}}\ \textit{block}
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/2.2.4.html\#footnote-3}{lambda expression (block body)}}\\
+&&                       && |   &\quad &&   \code{<} \textit{type-params} \code{>}
+                                            \textbf{\texttt{(}}\ \textit{parameters}\ \textbf{\texttt{):}}\ 
+                                            \textit{type}\ 
+                                            \texttt{\textbf{=>}}\ \textit{block}
+                                                           \\
+&&                       && |   &\quad &&   \textit{expr} \ \textbf{\texttt{?}}\ 
+                                            \textit{expr}
+                                            \ \textbf{\texttt{:}}\
+                                            \textit{expr}\
+                                                           && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.6.html\#p1}{conditional expression}}\\
+&&                       && |   &\quad &&  \textbf{\texttt{(}}\  \textit{expr} \ 
+                                            \textbf{\texttt{)}} && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.1.html\#p6}{parenthesised expression}}\\[1mm]
+&& \textit{binary-operator}    \ 
+                        && ::= &\quad && \textbf{\texttt{+}}\ |\ \textbf{\texttt{-}}\ |\ \textbf{\texttt{*}}\ |\ \textbf{\texttt{/}}\ |\ \textbf{\texttt{\%}}\ |\ 
+                                   \textbf{\texttt{===}}\ |\ \textbf{\texttt{!==}}\ \\
+&&                       && |  &\quad &&  \texttt{\textbf{>}}\ |\ \texttt{\textbf{<}}\ |\ \texttt{\textbf{>=}}\ |\ \texttt{\textbf{<=}}\
+                                          |\ \textbf{\texttt{\&\&}}\ |\ \texttt{\textbf{||}}
+                                          && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.1.html\#p4}{binary operator}}\\[1mm]
+&& \textit{unary-operator}    
+                        && ::= &\quad && \textbf{\texttt{!}}\ |\ \textbf{\texttt{-}}
+                        && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.6.html\#p4}{unary operator}}\\[1mm]
+&& \textit{expressions}  && ::= &\quad && \epsilon\ | \ \textit{expr}\ (
+                                                               \ \textbf{\texttt{,}} \
+                                                                 \textit{expr} \ 
+                                                                      )\ \ldots
+                                                            && \textrm{\href{https://source-academy.github.io/sicp/chapters/1.1.4.html\#p5}{argument expressions}} \\[1mm]
+&& \textit{types}  && ::= &\quad && \textit{type}\ (\ \textbf{\texttt{,}} \ \textit{type} \ )\ \ldots
+                                                            && \textrm{type arguments} 
+\end{alignat*}
+
+\newpage
+
+
+\subsection*{Restrictions}
+
+\DynamicTS{} contains most of the same restrictions as Source \S 1. 
+
+In particular:
+
+\begin{itemize}
+    \item There cannot be any newline character between ( \textit{name} | \code{(} \textit{parameters} \code{)} ) and \code{=>} in function
+definition expressions.
+    \item Return statements are not allowed to be empty, i.e. the statement \verb|return;| is invalid.
+
+    \item Implementations are allowed to treat function declaration as \href{https://source-academy.github.io/sicp/chapters/1.3.2.html#footnote-2}{syntactic sugar for constant declaration}. 
+    \DynamicTS{} programmers need to make sure that functions are not called before their corresponding function declaration is evaluated.
+\end{itemize}
+
+The key differences are:
+\begin{itemize}
+    \item Semicolons are not required.
+    \item If there is a newline character between \code{return} and \textit{expression} in return statements, 
+    then \code{return} is treated as an empty return statement (which is not allowed).
+\end{itemize}
+
+
+
+\section{Dynamic Type Checking}
+
+\subsection{Infrastructure}
+
+\subsubsection*{Runtime Type Information}
+
+Expressions evaluate to number, boolean, string, or function values. 
+Every value is also tagged with its type to facilitate type checking.
+For example, the expression \code{1} is evaluated to $(1, \texttt{number})$.
+Note that these $(\textit{value}, \textit{type})$ pairs will be referred to as \textit{typed values}.
+
+Implementations generate error messages when unexpected types are used, as defined in section \ref{eval}.
+
+\subsubsection*{Type Environment}
+
+In order to deal with type references, we introduce a type environment, which maps names to types. 
+The types in the type environment must not be type references, but they can \textit{contain} type references---for example, the parameters and return type of a generic function type like \code{<T>(x:T) => T} can be references to its type parameters.
+
+
+\subsection{Evaluation}
+\label{eval}
+
+Evaluation $\Eval$ is a quinary (5-ary) relation that maps an expression to a value and type in the  context of an environment and type environment.
+Formally, 
+
+\begin{align*}
+    (\textrm{Env}, \textrm{TypeEnv}) \vdash \textrm{\DynamicTS{}} \Eval \textrm{(Value, Type)}
+\end{align*}
+
+where Env and TypeEnv are defined as follows:
+
+\begin{align*}
+\textrm{Env} &: \textrm{Name} \mapsto \textrm{(Value, Type)} \\
+\textrm{TypeEnv} &: \textrm{Name} \mapsto \textrm{Type}
+\end{align*}
+
+\subsubsection*{Types}
+
+Since type names are never re-assigned, each type expression in a \DynamicTS{} program is mapped directly to a runtime type.
+
+Primitive types are mapped to their runtime equivalents (i.e. runtime number, runtime boolean, runtime string). 
+A runtime undefined type is used as the result type for non-value-producing statements (e.g. constant declarations).
+
+A runtime function type consists of a list of type parameters, a list of parameter types (which are themselves runtime types), and a return type (which is a runtime type).
+\DynamicTS{} function types are mapped to their runtime equivalents by recursively converting the parameter and return types. 
+
+Implementations should also allow for runtime type references to deal with generic function types.
+However, type names are resolved to their actual types where possible (the exact behaviour is described in the last paragraph of section \ref{generics1}).
+
+
+\subsubsection*{Primitive expressions}
+
+As mentioned above, numbers, booleans, and strings are evaluated to their respective semantic values, with the types being \code{number}, \code{boolean}, or \code{string} respectively.
+
+\subsubsection*{Primitive operators}
+
+When evaluating unary and binary operator combinations, 
+operand types are first checked according to the tables below.
+A error message specifying the expected type is produced if the types are not equal.
+
+\begin{center}
+\begin{tabular}{c|c|c|c}
+operator & operand 1 & operand 2 & result\\ \hline
+\texttt{\textbf{+}} & number   & number     & number\\
+\texttt{\textbf{+}} & string   & string     & string\\
+\texttt{\textbf{-}} & number   & number     & number\\
+\texttt{\textbf{*}} & number   & number     & number\\
+\texttt{\textbf{/}} & number   & number     & number\\
+\texttt{\textbf{\%}} & number   & number     & number\\
+\texttt{\textbf{===}} & number   & number     & bool\\
+\texttt{\textbf{===}} & string   & string     & bool\\
+\texttt{\textbf{!==}} & number   & number     & bool\\
+\texttt{\textbf{!==}} & string   & string     & bool\\
+\texttt{\textbf{>}} & number   & number     & bool\\
+\texttt{\textbf{>}} & string   & string     & bool\\
+\texttt{\textbf{<}} & number   & number     & bool\\
+\texttt{\textbf{<}} & string   & string     & bool\\
+\texttt{\textbf{>=}} & number   & number     & bool\\
+\texttt{\textbf{>=}} & string   & string     & bool\\
+\texttt{\textbf{<=}}    & number   & number     & bool\\
+\texttt{\textbf{<=}} & string   & string     & bool\\
+\texttt{\textbf{\&\&}} & bool & any & any \\
+\texttt{\textbf{||}}   & bool & any & any \\
+\texttt{\textbf{!}}    & bool &      & bool\\
+\texttt{\textbf{-}}    & number &    & number
+\end{tabular}
+\end{center}
+
+\subsubsection*{Conditional expressions}
+
+Conditional expressions are of the form $predicate \code{?} consequent \code{:} alternative$.
+The result of evaluating $predicate$ (in the context of the current Env and TypeEnv) must have type \code{boolean}. 
+However, the results of evaluating $consequent$ and $alternative$ (in the current Env and TypeEnv) can have different types.
+
+
+\subsubsection*{Constant declarations}
+
+Constant declarations add a name-value binding to Env as follows:
+
+\begin{center}
+$\Rule{E \Eval (v_1, t_1) \qquad (\textrm{Env}[x \leftarrow (v_1, t_1)], \textrm{TypeEnv}) \vdash S; \Eval (v_2, t_2)}{(\textrm{Env, TypeEnv}) \vdash \Const\ x = E; S;\ \Eval (v_2, t_2)}$
+\end{center}
+
+In the case of annotated constant declarations, the type annotation is first converted to a runtime type $t_{expected}$. 
+$t_{expected}$ is then checked to ensure it is \textbf{valid} in the current TypeEnv, which means that if $t_{expected}$ contains a reference to a name $y$, there must be some type $t_{resolved}$ such that TypeEnv($y$) = $t_{resolved}$.
+
+Finally, implementations must check that $t_{expected}$ and $t_1$ are \textbf{equal}.
+At a basic level, two types are equal if and only if they are both primitive types (number/boolean/string) and have the same type, or they are function types and all of their parameter and return types are equal.
+
+A formal definition of validity and type equality is provided in section \ref{generics1}.
+
+
+\subsubsection*{Function declarations}
+
+Like in Source \S 1, function declarations are treated as constant declarations with a lambda expression value. A lambda expression is evaluated to a closure, i.e. (\textit{parameters}, \textit{body}, \textit{environment}, \textit{type-environment}), and a function type. 
+
+Implementations should first ensure that all parameter and return types are annotated, and show an error message otherwise.
+
+Implementations should also check that the runtime function type corresponding to the given type annotations is \textit{valid} in TypeEnv (as defined above).
+
+% TODO: define a function that maps type annotations to RTT
+
+
+\subsubsection*{Function applications}
+
+Only values with function types can be applied, or in other words:
+
+\begin{center}
+    $\Rule{ (\textit{Env}, \textit{TypeEnv}) \vdash E \Eval (v, t)}{ (\textit{Env}, \textit{TypeEnv}) \vdash E(E_1, \dots, E_n) \Eval \textit{Error} }$ 
+    if $t$ is not a function type
+\end{center}
+
+If $t$ is a function type, then all arguments are evaluated to typed values before type checking takes place.
+
+First, the number of arguments $n$ must be \textit{equal} to the number of parameters in the function type $t$.
+Given that $t = (t_{e1}, \dots, t_{em}) \rightarrow t_r$, $n = m$.
+
+Second, the type of each argument must be \textit{equal} to the corresponding parameter type.
+Given that $E_1, \dots, E_n$ evaluate to $(v_1, t_1), \dots, (v_n, t_n)$, we have $t_{ei}$ is equal to $t_i$ for $i \in [1, n]$.
+
+If none of the above checks results in a type error, the body of the function is evaluated in an extension of the closure's environment, where the names of function parameters are bound to their respective arguments (typed values).
+The result of the function application is the resulting value from the return statement.
+
+The type of the function's return value must be \textit{equal} to the function's return type. 
+Otherwise, an error message is shown.
+
+\vspace{1em}
+\textbf{Tail call optimisation}
+
+\DynamicTS{} supports proper tail calls. 
+If a function's return statement only contains a function application, the function's environment is reused in the next .
+
+In this case, type checking proceeds in the same way as normal function applications.
+
+\subsubsection*{Polymorphic (Generic) Function Declaration}
+\label{generics1}
+
+This section concerns lambda expressions and function declarations with type parameters.
+For example:
+
+\begin{center}
+    $\code{<} P_1, \dots, P_k \code{>(} x_1: T_1, \dots, x_n: T_n \code{): } T_r \code{ => \{ } S \code{ \} }  $
+\end{center}
+
+Note that $T_1, \dots, T_n, T_r$ can also be generic function types whose parameter and return types contain references to $P_1, \dots, P_k$.
+
+Hence, we modify the definition of \textbf{validity} as follows:
+\begin{itemize}
+    \item A type's validity is checked in the context of a type environment and a temporary set of types $Types$, which contains the names of type parameters from the function type.
+    % TODO: more precise definition.
+    \item When checking the validity of a generic function type, first add the type parameters $P_1, \dots, P_k$ to a copy of $Types$ to get $Types_{new}$. 
+    \item Then recursively check that each of $T_1, \dots, T_n, T_r$ is valid given the new set $Types_{new}$ and the original \textit{TypeEnv}. A type is valid if, whenever it contains a reference to a name $y$, either $y$ is found in $Types_{new}$, or $y$ is found in the type environment (there exists $t_{resolved}$ such that \textit{TypeEnv}($y$) = $t_{resolved}$).
+\end{itemize}
+
+We also need to modify the definition of \textbf{type equality}. Note that the runtime function types from the following two functions should be equal:
+
+\begin{center}
+    \verb|<T>(x: T): <R>(y: T) => R => x| \\
+    \verb|<S>(x: S): <P>(y: S) => P => x|
+\end{center}
+
+Hence, we add a temporary "type environment" $TTEnv$ that maps type names to their position in the type hierarchy. 
+A position is a pair ($a, b$) where $a$ is the index of the type in the list of type parameters and $b$ is the number of nested levels of hierarchy.
+\footnote{In the above example, the type annotation $T$ for the parameter $x$ references a type at position (0, 0) - since $T$ is the first type parameter in \texttt{<T>} and it is at the top level. 
+On the other hand, the type annotation $R$ for the return type of the return type references a type at position (0, 1), since $R$ is the first type parameter in \texttt{<R>} and the generic function where it is defined is nested one level deep.}
+
+Hence, two types $t_1$ and $t_2$ are equal in the context of $TTEnv_1$ and $TTEnv_2$ if and only if:
+\begin{itemize}
+    \item They are the same primitive type (number/boolean/string).
+    \item They are both type references and the type names that they reference have the same position in their respective $TTEnv$.
+    \item They are both function types and their parameter and return types are equal in the context of $TTEnv_1$ and $TTEnv_2$.
+    \item They are both generic function types with the same number of type parameters, and their parameter and return types are equal in the context of $TTEnv_1^{new}$ and $TTEnv_2^{new}$. 
+    The new temporary type environments $TTEnv_i^{new}$ are constructed by extending $TTEmv_i$ with a mapping of each type parameter to its position. Note that this allows previous mappings of the same type name to be shadowed.
+    Also note that the function must keep track of the current level of hierarchy. This level is incremented when the new temporary type environments are used, i.e. when checking a generic functions' parameter and return types after constructing a temporary type environment. The level can also (optionally) be incremented when checking a non-generic function's parameter and return types.
+\end{itemize}
+
+Finally, before constructing any type (e.g. the expected type for constant declarations), type references must first be \textbf{resolved} to their actual values in the current \textit{TypeEnv}. 
+In other words: for every type reference $y$ in the type to be resolved, $y$ either refers to a type parameter or a type in \textit{TypeEnv}. If it refers to a type parameter, the reference $y$ is left as it is. However, if it references a type in \textit{TypeEnv}, the $y$ is "replaced" by \textit{TypeEnv($y$)}. 
+(Runtime types are immutable, so "replacement" involves constructing a new resolved runtime type.)
+
+
+\subsubsection*{Polymorphic (Generic) Function Application}
+
+Consider the following application of a function \verb|foo| with type 
+\verb|<T>(y: T, f: (x: T) => T) => T|:
+
+\begin{center}
+    \verb|foo<number>(1, (x: number): number => x + 1)|
+\end{center}
+
+When applying a generic function, we check that the number of arguments and type arguments are correct.
+
+We then create a(nother) temporary type environment where each type parameter is bound to its type argument, and resolve the function parameter types (i.e. runtime types of \verb|T| and \verb|(x: T) => T|) to their actual types $t_{expected,1}, \dots, t_{expected,n}$ 
+(i.e. the runtime types of \verb|number| and \verb|(x: number) => number|).
+We then check that each expected parameter type is \textit{equal} to its corresponding argument type.
+
+Next, the environment and type environment \textit{of the closure} are extended as follows:
+\begin{itemize}
+    \item \textit{TypeEnv}: Add a binding of each type parameter name to the type argument.
+    \item \textit{Env} (no change): Add a binding of each parameter name to the argument $(v, t)$.
+\end{itemize}
+The function body is evaluated in the context of the new Env and TypeEnv.
+
+Finally, the expected return type is resolved in the context of the new type environment (which contains the bindings for the type parameters). The type of the function's return value must be equal to the expected return type.
+
+
+
+\end{document}
