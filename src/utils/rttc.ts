@@ -578,7 +578,7 @@ export const getTypeArgs = (node: babel.TSTypeParameterInstantiation | null, env
   }
   const typeArgs = node.params.map(type => {
     const rtt = convertToRuntimeType(type)
-    return isRuntimeTypeReference(rtt) ? lookupType(env, rtt.value, node) : rtt
+    return resolveToActualType(rtt, {}, env, node)
   })
   for (const typeArgOrError of typeArgs) {
     if (typeArgOrError instanceof UndefinedTypeError) {
