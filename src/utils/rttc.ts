@@ -139,7 +139,7 @@ export const convertToRuntimeType = (t: babel.TSType): RuntimeType | RuntimeType
   }
 }
 
-const isMatchingType = (
+const areTypesEqual = (
   t1: RuntimeType | RuntimeTypeReference,
   t2: RuntimeType,
   t1TypeEnv: TypeName[][] = [],
@@ -163,8 +163,8 @@ const isMatchingType = (
     //   continue // if either parameter is 'any', no need to check
     // }
     if (
-      !isMatchingTypeReference(t1Parameter, t2Parameter, newT1TypeEnv, newT2TypeEnv) ||
-      !isMatchingType(t1Parameter, t2Parameter as RuntimeType, newT1TypeEnv, newT2TypeEnv)
+      !areTypeReferencesEqual(t1Parameter, t2Parameter, newT1TypeEnv, newT2TypeEnv) ||
+      !areTypesEqual(t1Parameter, t2Parameter as RuntimeType, newT1TypeEnv, newT2TypeEnv)
     ) {
       // TODO: ensure t2Parameter is not RuntimeTypeReference
       return false
@@ -174,8 +174,8 @@ const isMatchingType = (
   //   return true
   // } else
   if (
-    !isMatchingTypeReference(t1.returnType, t2.returnType, newT1TypeEnv, newT2TypeEnv) ||
-    !isMatchingType(t1.returnType, t2.returnType as RuntimeType, newT1TypeEnv, newT2TypeEnv)
+    !areTypeReferencesEqual(t1.returnType, t2.returnType, newT1TypeEnv, newT2TypeEnv) ||
+    !areTypesEqual(t1.returnType, t2.returnType as RuntimeType, newT1TypeEnv, newT2TypeEnv)
   ) {
     return false
   }
@@ -187,7 +187,7 @@ const isMatchingType = (
  * or if both are type references but have different positions in the typeParams 2D array.
  * Returns true otherwise.
  */
-const isMatchingTypeReference = (
+const areTypeReferencesEqual = (
   t1: RuntimeType | RuntimeTypeReference,
   t2: RuntimeType | RuntimeTypeReference,
   t1TypeParams: TypeName[][],
@@ -388,100 +388,6 @@ const checkFunctionTypeValid = (
 }
 
 /**
- * Checks that a variable's initial value's type matches the declared type,
- * if a type annotation is present.
- *
- * NOTE: When implementing variable assignment, use the initial value's type
- * as the variable's type.
- */
-export const checkVariableDeclaration = (
-  node: babel.VariableDeclaration,
-  id: babel.Identifier,
-  init: TypedValue,
-  env: Environment
-) => {
-  if (id.typeAnnotation) {
-    if (!babel.isTSTypeAnnotation(id.typeAnnotation)) {
-      return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //invalid TypeScript program
-    }
-    const typeAnnotation = id.typeAnnotation.typeAnnotation
-    // if (babel.isAnyTypeAnnotation(typeAnnotation)) {
-    //   return undefined
-    // }
-    const error = checkTSTypeValid(typeAnnotation, new Set(), env)
-    if (error) {
-      return error
-    }
-    const rttOrTypeName = convertToRuntimeType(typeAnnotation)
-    const expectedVariableType = resolveToActualType(rttOrTypeName, {}, env, node) as RuntimeType // undefined type references would have been caught by `checkTSTypeValid`
-    if (!isMatchingType(expectedVariableType, init.type)) {
-      return new TypeError(
-        node,
-        ` as type of ${id.name}`,
-        rttToString(expectedVariableType),
-        rttToString(init.type)
-      )
-    }
-  }
-  return undefined
-}
-
-/**
- * Checks that a function has properly annotated parameter types and a return type,
- * and that all type references are valid.
- */
-export const checkFunctionDeclaration = (
-  node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression,
-  env: Environment
-) => {
-  const functionName = babel.isFunctionDeclaration(node)
-    ? `function ${node.id!.name}`
-    : babel.isArrowFunctionExpression(node)
-    ? stringifyArrowFunctionExpression(node)
-    : 'function expression'
-
-  // Check presence of type annotations
-  for (const id of node.params) {
-    const identifier = id as babel.Identifier
-    if (!identifier.typeAnnotation) {
-      return new TypeError(
-        node,
-        ` for parameter ${identifier.name} in ${functionName}`,
-        'type annotation',
-        'none'
-      )
-    }
-  }
-  if (!node.returnType) {
-    return new TypeError(node, ` for ${functionName}`, 'return type annotation', 'none')
-  }
-
-  // Check validity of type annotations
-  const typeParameters: Set<string> = new Set()
-  if (node.typeParameters) {
-    const params = (node.typeParameters as babel.TSTypeParameterDeclaration).params
-    for (let i = 0; i < params.length; i++) {
-      typeParameters.add(params[i].name)
-    }
-  }
-  for (const id of node.params) {
-    const typeAnnotation = ((id as babel.Identifier).typeAnnotation as babel.TSTypeAnnotation)
-      .typeAnnotation
-    const error = checkTSTypeValid(typeAnnotation, typeParameters, env)
-    if (error) {
-      return error
-    }
-  }
-  const typeAnnotation = (node.returnType as babel.TSTypeAnnotation).typeAnnotation
-  const error = checkTSTypeValid(typeAnnotation, typeParameters, env)
-  if (error) {
-    return error
-  }
-
-  return undefined
-}
-
-/**
  * Returns the runtime function type for the given node, with type references
  * resolved to their actual types in the given environment.
  * Assumes that the validity of type references has already been checked before this.
@@ -509,31 +415,6 @@ export const typeOfFunction = (
   const returnRTT = convertToRuntimeType((node.returnType as babel.TSTypeAnnotation).typeAnnotation)
   const returnType = resolveToActualType(returnRTT, typeEnv, env, node) as RuntimeType // if error, should have been thrown in `checkFunctionDeclaration`
   return { kind: 'function', typeParams, paramTypes, returnType }
-}
-
-// Checks that the given value can be called, i.e. is a function
-export const checkCallee = (node: babel.CallExpression, callee: TypedValue) => {
-  if (!isRuntimeFunctionType(callee.type)) {
-    return new TypeError(node, ` as callee`, 'function', callee.type.kind)
-  }
-  return undefined
-}
-
-export const getTypeArgs = (node: babel.TSTypeParameterInstantiation | null, env: Environment) => {
-  if (!node) {
-    return []
-  }
-  const typeArgs = node.params.map(type => {
-    const rtt = convertToRuntimeType(type)
-    return isRuntimeTypeReference(rtt) ? lookupType(env, rtt.value, node) : rtt
-  })
-  for (const typeArgOrError of typeArgs) {
-    if (typeArgOrError instanceof UndefinedTypeError) {
-      // TODO: better way to pass error value
-      return typeArgOrError // error
-    }
-  }
-  return typeArgs as RuntimeType[]
 }
 
 /**
@@ -606,6 +487,125 @@ const resolveToActualType = (
   return resolvedType
 }
 
+/**
+ * Checks that a variable's initial value's type matches the declared type,
+ * if a type annotation is present.
+ *
+ * NOTE: When implementing variable assignment, use the initial value's type
+ * as the variable's type.
+ */
+export const checkVariableDeclaration = (
+  node: babel.VariableDeclaration,
+  id: babel.Identifier,
+  init: TypedValue,
+  env: Environment
+) => {
+  if (id.typeAnnotation) {
+    if (!babel.isTSTypeAnnotation(id.typeAnnotation)) {
+      return new TypeError(node, '', 'TSTypeAnnotation', id.typeAnnotation.type) //invalid TypeScript program
+    }
+    const typeAnnotation = id.typeAnnotation.typeAnnotation
+    // if (babel.isAnyTypeAnnotation(typeAnnotation)) {
+    //   return undefined
+    // }
+    const error = checkTSTypeValid(typeAnnotation, new Set(), env)
+    if (error) {
+      return error
+    }
+    const rttOrTypeName = convertToRuntimeType(typeAnnotation)
+    const expectedVariableType = resolveToActualType(rttOrTypeName, {}, env, node) as RuntimeType // undefined type references would have been caught by `checkTSTypeValid`
+    if (!areTypesEqual(expectedVariableType, init.type)) {
+      return new TypeError(
+        node,
+        ` as type of ${id.name}`,
+        rttToString(expectedVariableType),
+        rttToString(init.type)
+      )
+    }
+  }
+  return undefined
+}
+
+/**
+ * Checks that a function has properly annotated parameter types and a return type,
+ * and that all type references are valid.
+ */
+export const checkFunctionDeclaration = (
+  node: babel.FunctionDeclaration | babel.FunctionExpression | babel.ArrowFunctionExpression,
+  env: Environment
+) => {
+  const functionName = babel.isFunctionDeclaration(node)
+    ? `function ${node.id!.name}`
+    : babel.isArrowFunctionExpression(node)
+    ? stringifyArrowFunctionExpression(node)
+    : 'function expression'
+
+  // Check presence of type annotations
+  for (const id of node.params) {
+    const identifier = id as babel.Identifier
+    if (!identifier.typeAnnotation) {
+      return new TypeError(
+        node,
+        ` for parameter ${identifier.name} in ${functionName}`,
+        'type annotation',
+        'none'
+      )
+    }
+  }
+  if (!node.returnType) {
+    return new TypeError(node, ` for ${functionName}`, 'return type annotation', 'none')
+  }
+
+  // Check validity of type annotations
+  const typeParameters: Set<string> = new Set()
+  if (node.typeParameters) {
+    const params = (node.typeParameters as babel.TSTypeParameterDeclaration).params
+    for (let i = 0; i < params.length; i++) {
+      typeParameters.add(params[i].name)
+    }
+  }
+  for (const id of node.params) {
+    const typeAnnotation = ((id as babel.Identifier).typeAnnotation as babel.TSTypeAnnotation)
+      .typeAnnotation
+    const error = checkTSTypeValid(typeAnnotation, typeParameters, env)
+    if (error) {
+      return error
+    }
+  }
+  const typeAnnotation = (node.returnType as babel.TSTypeAnnotation).typeAnnotation
+  const error = checkTSTypeValid(typeAnnotation, typeParameters, env)
+  if (error) {
+    return error
+  }
+
+  return undefined
+}
+
+// Checks that the given value can be called, i.e. is a function
+export const checkCallee = (node: babel.CallExpression, callee: TypedValue) => {
+  if (!isRuntimeFunctionType(callee.type)) {
+    return new TypeError(node, ` as callee`, 'function', callee.type.kind)
+  }
+  return undefined
+}
+
+export const getTypeArgs = (node: babel.TSTypeParameterInstantiation | null, env: Environment) => {
+  if (!node) {
+    return []
+  }
+  const typeArgs = node.params.map(type => {
+    const rtt = convertToRuntimeType(type)
+    return isRuntimeTypeReference(rtt) ? lookupType(env, rtt.value, node) : rtt
+  })
+  for (const typeArgOrError of typeArgs) {
+    if (typeArgOrError instanceof UndefinedTypeError) {
+      // TODO: better way to pass error value
+      return typeArgOrError // error
+    }
+  }
+  return typeArgs as RuntimeType[]
+}
+
 export const checkTypeOfArguments = (
   node: babel.CallExpression,
   functionType: RuntimeFunctionType,
@@ -634,7 +634,7 @@ export const checkTypeOfArguments = (
   const paramTypes = functionType.paramTypes
   const argTypes = args.map(typedValue => typedValue.type)
   for (let i = 0; i < paramTypes.length; i++) {
-    if (!isMatchingType(expectedParamTypes[i], argTypes[i])) {
+    if (!areTypesEqual(expectedParamTypes[i], argTypes[i])) {
       // if (!isRuntimeAny(expectedParamType) && !isMatchingType(expectedParamType, argTypes[i])) {
       return new TypeError(
         node,
@@ -665,7 +665,7 @@ export const checkTypeOfReturnValue = (
   } else if (actualReturnType.kind === 'name') {
     throw Error() // TODO: ensure this can't happen
   }
-  if (!isMatchingType(expectedReturnType, actualReturnType)) {
+  if (!areTypesEqual(expectedReturnType, actualReturnType)) {
     // if (!isRuntimeAny(expectedReturnType) && !isMatchingType(expectedReturnType, result.type)) {
     return new TypeError(
       node,
