@@ -211,21 +211,12 @@ const checkNumberOfArguments = (
   args: Value[],
   exp: babel.CallExpression
 ) => {
-  // TODO: should this be checked using types or node?
-  if (callee instanceof Closure) {
-    if (callee.node.params.length !== args.length) {
-      return handleRuntimeError(
-        context,
-        new errors.InvalidNumberOfArguments(exp, callee.node.params.length, args.length)
-      )
-    }
-  } else {
-    if (callee.hasVarArgs === false && callee.length !== args.length) {
-      return handleRuntimeError(
-        context,
-        new errors.InvalidNumberOfArguments(exp, callee.length, args.length)
-      )
-    }
+  const functionType = callee.type as RuntimeFunctionType
+  if (functionType.paramTypes.length !== args.length) {
+    return handleRuntimeError(
+      context,
+      new errors.InvalidNumberOfArguments(exp, functionType.paramTypes.length, args.length)
+    )
   }
   return undefined
 }
@@ -236,7 +227,6 @@ const checkNumberOfTypeArguments = (
   typeArgs: RuntimeType[],
   exp: babel.CallExpression
 ) => {
-  // TODO: should this be checking the Closure instead?
   if (functionType.typeParams.length !== typeArgs.length) {
     return handleRuntimeError(
       context,
@@ -257,7 +247,6 @@ function* getArgs(context: Context, call: es.CallExpression) {
 export type Evaluator<T extends es.Node> = (node: T, context: Context) => IterableIterator<Value>
 
 function* evaluateBlockStatement(context: Context, node: es.BlockStatement) {
-  // TODO: declare types
   declareFunctionsAndVariables(context, node)
   let result
   for (const statement of node.body) {

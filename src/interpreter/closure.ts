@@ -16,8 +16,8 @@ const closureToJS = (value: Closure, context: Context, klass: string) => {
     const args: Value[] = Array.prototype.slice.call(arguments)
     const gen = apply(
       context,
-      // FIXME: figure out what this does
-      { type: { kind: 'unknown' }, value },
+      // TODO: figure out what this does
+      { type: { kind: 'undefined' }, value },
       args,
       [],
       (callExpression(identifier(klass), args) as unknown) as babel.CallExpression,
