@@ -568,10 +568,12 @@ export function* apply(
   node: babel.CallExpression,
   thisContext?: Value
 ) {
-  const originalFun = fun // for checking return type
-
   let result: Value
   let total = 0
+
+  // for checking return type
+  const originalFun = fun
+  let firstEnv
 
   while (!(result instanceof ReturnValue)) {
     if (fun.value instanceof Closure) {
@@ -593,6 +595,7 @@ export function* apply(
       if (result instanceof TailCallReturnValue) {
         replaceEnvironment(context, environment)
       } else {
+        firstEnv = environment
         pushEnvironment(context, environment)
         total++
       }
@@ -652,7 +655,7 @@ export function* apply(
       (node! as unknown) as babel.CallExpression,
       originalFun.type as RuntimeFunctionType,
       result.value,
-      currentEnvironment(context)
+      firstEnv ?? currentEnvironment(context)
     )
     if (error) {
       return handleRuntimeError(context, error)
