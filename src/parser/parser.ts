@@ -279,12 +279,7 @@ export function parse(source: string, context: Context) {
       context.babelErrors = error
       console.log(error)
     }
-
-    if (program && !context.errors) {
-      return program
-    } else {
-      return undefined
-    }
+    return undefined
   } else {
     return undefined
   }
