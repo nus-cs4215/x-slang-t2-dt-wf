@@ -568,6 +568,8 @@ export function* apply(
   node: babel.CallExpression,
   thisContext?: Value
 ) {
+  const originalFun = fun // for checking return type
+
   let result: Value
   let total = 0
 
@@ -648,7 +650,7 @@ export function* apply(
   if (result instanceof ReturnValue) {
     const error = rttc.checkTypeOfReturnValue(
       (node! as unknown) as babel.CallExpression,
-      fun.type as RuntimeFunctionType,
+      originalFun.type as RuntimeFunctionType,
       result.value,
       currentEnvironment(context)
     )
