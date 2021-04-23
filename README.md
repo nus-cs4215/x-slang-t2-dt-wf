@@ -4,7 +4,7 @@ Welcome to the Dynamic TypeScript!
 
 Dynamic TypeScript is a variant of TypeScript that uses TypeScript syntax with dynamic type checking. Its language features are similar to Source §1, but with type annotations. Our project comprises of two components, x-slang and x-frontend. The playground provides detail information when error occurs for better debugging experiences.
 
-Source§1 is documented here: <https://sicp.comp.nus.edu.sg/source/>
+Source§1 is documented here: <https://sicp.comp.nus.edu.sg/source/>\
 Dynamic TypeScript is documented here: <>
 
 About Dynamic TypeScript
@@ -70,7 +70,7 @@ Scope & Syntax
 ```ts
 const x: number = 1;
 ```
-Note: for name declaration, type annotations are optional.
+Note: type annotations are optional.
 
 3.Function declarations, function calls (including higher-order functions)
 ```ts
@@ -79,7 +79,6 @@ function goo(x: number): (y: number) => number {
     return (y: number): number => x; 
 }
 ```
-Note: Type Annotations are required for parameter and return types in our language.
 
 4.Generic functions and generic (polymorphic) types 
 ```ts
