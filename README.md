@@ -40,7 +40,7 @@ The Babel parser (previously Babylon) is a JavaScript parser used in Babel.
 1.The latest ECMAScript version enabled by default (ES2020).\
 2.Comment attachment.\
 3.Support for JSX, Flow, Typescript.\
-4.Support for experimental language proposals (accepting PRs for anything at least stage-0).\
+4.Support for experimental language proposals (accepting PRs for anything at least stage-0).
 
 @babel/parser is documented here: <https://babeljs.io/docs/en/babel-parser>
 
