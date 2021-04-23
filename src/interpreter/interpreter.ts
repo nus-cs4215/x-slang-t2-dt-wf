@@ -463,6 +463,10 @@ export const evaluators: { [nodeType: string]: Evaluator<es.Node> } = {
     },
 
     ReturnStatement: function*(node: es.ReturnStatement, context: Context) {
+      if (!node.argument) {
+        return handleRuntimeError(context, new errors.ReturnStatementMissingValueError(node as unknown as babel.ReturnStatement))
+      }
+
       let returnExpression = node.argument!
 
       // If we have a conditional expression, reduce it until we get something else

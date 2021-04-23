@@ -324,3 +324,17 @@ export class MissingTypeAnnotationError extends RuntimeSourceError {
     return this.explain()
   }
 }
+
+export class ReturnStatementMissingValueError extends RuntimeSourceError {
+  constructor(node: babel.Node) {
+    super(node)
+  }
+
+  public explain() {
+    return 'Return statements must not be empty'
+  }
+
+  public elaborate() {
+    return this.explain()
+  }
+}
